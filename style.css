@@ -17,7 +17,10 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --lottie-size: min(72vw, 320px);
+  /* Constrain by width AND height so the cat never crowds the screen.
+     Tuned per breakpoint below for tablets / phones / landscape. */
+  --lottie-size: min(44vw, 38vh, 320px);
+  --walker-bottom: 26%;
   --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -127,7 +130,7 @@ body {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(28% + var(--safe-bottom));
+  bottom: calc(var(--walker-bottom) + var(--safe-bottom));
   height: var(--lottie-size);
   z-index: 10;
   pointer-events: none;
@@ -562,9 +565,71 @@ body {
   }
 }
 
-/* Low-power / small screens — smaller overlay */
+/* --------------------------------------------------------------------------
+   Responsive breakpoints — keep the cat from crowding small viewports.
+   The cat must stay small enough that the walking track has real distance.
+   -------------------------------------------------------------------------- */
+
+/* Tablets & small laptops */
+@media (max-width: 900px) {
+  :root {
+    --lottie-size: min(40vw, 36vh, 280px);
+    --walker-bottom: 24%;
+  }
+}
+
+/* Phones (portrait) */
+@media (max-width: 600px) {
+  :root {
+    --lottie-size: min(38vw, 30vh, 200px);
+    --walker-bottom: 22%;
+  }
+
+  .playback-btn {
+    min-width: 92px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+  }
+
+  .playback-controls {
+    gap: 8px;
+  }
+
+  .countdown-number {
+    font-size: clamp(4.5rem, 22vw, 9rem);
+  }
+
+  .countdown-label {
+    font-size: 0.82rem;
+  }
+}
+
+/* Small phones */
 @media (max-width: 380px) {
   :root {
-    --lottie-size: min(78vw, 260px);
+    --lottie-size: min(42vw, 28vh, 160px);
+    --walker-bottom: 20%;
+  }
+
+  .playback-btn {
+    min-width: 84px;
+    padding: 9px 14px;
+    font-size: 0.78rem;
+  }
+}
+
+/* Landscape phones — height is the constraint, not width */
+@media (max-height: 480px) and (orientation: landscape) {
+  :root {
+    --lottie-size: min(26vw, 58vh, 220px);
+    --walker-bottom: 18%;
+  }
+
+  .countdown-number {
+    font-size: clamp(3rem, 14vw, 7rem);
+  }
+
+  .countdown-label {
+    font-size: 0.75rem;
   }
 }
