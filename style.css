@@ -1,0 +1,570 @@
+/* ==========================================================================
+   AR Lens — Premium mobile-first Snapchat-style experience
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --accent: #5ee8b8;
+  --accent-pink: #ff73bf;
+  --glass: rgba(12, 14, 22, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lottie-size: min(72vw, 320px);
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a12;
+  color: #fff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* --------------------------------------------------------------------------
+   Camera feed — fullscreen mirrored background
+   -------------------------------------------------------------------------- */
+.camera-feed {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  transform: scaleX(-1); /* mirror for selfie-style UX */
+  background: #000;
+}
+
+/* --------------------------------------------------------------------------
+   Bottom dock — controls + Lottie cat
+   -------------------------------------------------------------------------- */
+.lottie-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.lottie-walker.is-ready .lottie-overlay {
+  opacity: 1;
+}
+
+/* Playback controls */
+.playback-controls {
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.playback-controls[hidden] {
+  display: none !important;
+}
+
+.playback-btn {
+  min-width: 108px;
+  padding: 12px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform var(--transition-fast), opacity var(--transition-fast), filter var(--transition-fast);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.playback-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.playback-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.playback-btn--play {
+  background: linear-gradient(180deg, var(--accent), #3bc998);
+  color: #0a1a12;
+  border-color: transparent;
+}
+
+.playback-btn--pause {
+  background: var(--glass);
+  color: #fff;
+}
+
+.playback-btn--pause:not(:disabled) {
+  border-color: rgba(255, 115, 191, 0.45);
+}
+
+/* Full-width track — cat walks left → right */
+.lottie-walker {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(28% + var(--safe-bottom));
+  height: var(--lottie-size);
+  z-index: 10;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Lottie cat — starts left, walks to right edge of track */
+.lottie-overlay {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--lottie-size);
+  height: var(--lottie-size);
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: center bottom;
+  transition: opacity var(--transition-smooth);
+}
+
+/* Flip if the Lottie asset faces left by default */
+.lottie-overlay.is-facing-right {
+  transform: scaleX(-1);
+}
+
+.lottie-overlay.is-walking {
+  animation: cat-walk-across var(--walk-duration, 5s) linear forwards;
+}
+
+@keyframes cat-walk-across {
+  from {
+    left: 0;
+  }
+  to {
+    left: calc(100% - var(--lottie-size));
+  }
+}
+
+.lottie-overlay svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* --------------------------------------------------------------------------
+   Countdown overlay — shows before the walk starts
+   -------------------------------------------------------------------------- */
+.countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(10, 10, 18, 0.55) 0%,
+    rgba(10, 10, 18, 0.2) 45%,
+    transparent 75%
+  );
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity var(--transition-smooth);
+}
+
+.countdown[hidden] {
+  display: none !important;
+}
+
+.countdown-number {
+  font-size: clamp(7rem, 32vw, 18rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 24px rgba(94, 232, 184, 0.55),
+    0 4px 32px rgba(0, 0, 0, 0.55);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  animation: countdown-pulse 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.countdown-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes countdown-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Hidden processing canvas (off-screen, zero layout impact) */
+.hands-canvas {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* --------------------------------------------------------------------------
+   Glass chrome — subtle blur bars top & bottom
+   -------------------------------------------------------------------------- */
+.glass-chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.glass-top-bar,
+.glass-bottom-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(72px + var(--safe-top));
+  background: linear-gradient(
+    180deg,
+    rgba(8, 10, 18, 0.55) 0%,
+    transparent 100%
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-top-bar {
+  top: 0;
+  padding-top: var(--safe-top);
+}
+
+.glass-bottom-bar {
+  bottom: 0;
+  height: calc(96px + var(--safe-bottom));
+  background: linear-gradient(
+    0deg,
+    rgba(8, 10, 18, 0.6) 0%,
+    transparent 100%
+  );
+  padding-bottom: var(--safe-bottom);
+}
+
+/* --------------------------------------------------------------------------
+   Status pill — gesture feedback
+   -------------------------------------------------------------------------- */
+.status-pill {
+  position: fixed;
+  top: calc(16px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  z-index: 20;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast), transform var(--transition-smooth);
+}
+
+.status-pill.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.status-pill.is-playing {
+  border-color: rgba(94, 232, 184, 0.45);
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Loading screen
+   -------------------------------------------------------------------------- */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 30%, #1a1f2e 0%, #0a0a12 70%);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.loading-screen.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.loading-card {
+  text-align: center;
+  padding: 32px 28px;
+  width: min(88vw, 300px);
+  border-radius: 24px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.loading-spinner {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 20px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.loading-message {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 18px;
+  min-height: 1.2em;
+}
+
+.loading-progress {
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.loading-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-pink));
+  transition: width 0.3s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Tap-to-start (iOS fallback)
+   -------------------------------------------------------------------------- */
+.tap-start {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: none;
+  background: rgba(8, 10, 18, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: fade-in 0.4s ease;
+}
+
+.tap-start[hidden] {
+  display: none !important;
+}
+
+.tap-start-icon {
+  font-size: 2.5rem;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.tap-start-label {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Error screen
+   -------------------------------------------------------------------------- */
+.error-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 18, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.error-screen[hidden] {
+  display: none !important;
+}
+
+.error-card {
+  text-align: center;
+  padding: 28px 24px;
+  width: min(90vw, 320px);
+  border-radius: 20px;
+  background: var(--glass);
+  border: 1px solid rgba(255, 100, 100, 0.25);
+}
+
+.error-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ff8a8a;
+  margin-bottom: 10px;
+}
+
+.error-message {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+  margin-bottom: 20px;
+}
+
+.error-retry {
+  padding: 12px 28px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), #3bc998);
+  color: #0a1a12;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Swipe hint (bonus)
+   -------------------------------------------------------------------------- */
+.swipe-hint {
+  position: fixed;
+  bottom: calc(24px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+  animation: swipe-fade 2.5s ease-in-out infinite;
+}
+
+.swipe-hint[hidden] {
+  display: none !important;
+}
+
+@keyframes swipe-fade {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .tap-start-icon,
+  .swipe-hint {
+    animation: none;
+  }
+
+  .lottie-overlay,
+  .playback-btn {
+    transition: none;
+  }
+}
+
+/* Low-power / small screens — smaller overlay */
+@media (max-width: 380px) {
+  :root {
+    --lottie-size: min(78vw, 260px);
+  }
+}

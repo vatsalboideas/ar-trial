@@ -2,138 +2,100 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AR Cat</title>
-
-  <!-- Google model-viewer v4.2.0 (March 2026) -->
-  <script
-    type="module"
-    src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js"
-  ></script>
-
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #0f0f0f;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100dvh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #fff;
-    }
-
-    h1 {
-      font-size: 1.4rem;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      margin-bottom: 16px;
-      opacity: 0.85;
-    }
-
-    model-viewer {
-      width: 90vw;
-      max-width: 480px;
-      height: 60vh;
-      border-radius: 20px;
-      background: #1a1a2e;
-      --poster-color: transparent;
-    }
-
-    /* Custom AR launch button */
-    .ar-button {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: #fff;
-      color: #111;
-      border: none;
-      border-radius: 30px;
-      padding: 10px 22px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .ar-button:hover {
-      transform: scale(1.04);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-    }
-
-    .ar-button svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .hint {
-      margin-top: 14px;
-      font-size: 0.78rem;
-      opacity: 0.45;
-      text-align: center;
-      max-width: 300px;
-      line-height: 1.5;
-    }
-  </style>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0a0a12" />
+  <title>AR Lens</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <h1>AR Cat</h1>
-
-  <model-viewer
-    id="cat-viewer"
-    src="cat.glb"
-    alt="An animated 3D cat"
-    ar
-    ar-modes="webxr scene-viewer quick-look"
-    ar-scale="auto"
+  <!-- Fullscreen camera background -->
+  <video
+    id="camera-feed"
+    class="camera-feed"
     autoplay
-    animation-loop
-    camera-controls
-    auto-rotate
-    auto-rotate-delay="500"
-    rotation-per-second="30deg"
-    shadow-intensity="1.2"
-    environment-image="neutral"
-    exposure="1"
-    interaction-prompt="auto"
-  >
-    <!-- Custom AR button shown inside the model-viewer slot -->
-    <button slot="ar-button" class="ar-button">
-      <!-- AR icon -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-        <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-        <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-        <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-        <path d="M12 8l4 2v4l-4 2-4-2v-4z"/>
-        <line x1="12" y1="8" x2="12" y2="14"/>
-        <line x1="8" y1="10" x2="16" y2="10"/>
-      </svg>
-      View in AR
-    </button>
-  </model-viewer>
+    playsinline
+    muted
+    aria-hidden="true"
+  ></video>
 
-  <p class="hint">
-    Tap <strong>View in AR</strong> to place the cat in your space.<br/>
-    Requires ARCore (Android) or AR Quick Look (iOS). Cat animation plays automatically.
-  </p>
+  <!-- Cat walks left → right across the screen -->
+  <div id="lottie-walker" class="lottie-walker" aria-hidden="true">
+    <div id="lottie-container" class="lottie-overlay"></div>
+  </div>
 
-  <script>
-    // Some GLB files have multiple clips; force the first one if autoplay doesn't pick it.
-    const catViewer = document.getElementById('cat-viewer');
-    catViewer.addEventListener('load', () => {
-      const clips = catViewer.availableAnimations || [];
-      if (clips.length > 0 && !catViewer.animationName) {
-        catViewer.animationName = clips[0];
-        catViewer.play();
-      }
-    });
-  </script>
+  <!-- Bottom dock: Play / Pause -->
+  <div id="lottie-dock" class="lottie-dock">
+    <div id="playback-controls" class="playback-controls" hidden>
+      <button id="btn-play" class="playback-btn playback-btn--play" type="button">Play</button>
+      <button id="btn-pause" class="playback-btn playback-btn--pause" type="button" disabled>Pause</button>
+    </div>
+  </div>
 
+  <canvas id="hands-canvas" class="hands-canvas" aria-hidden="true"></canvas>
+
+  <!-- Premium glass UI chrome -->
+  <div class="glass-chrome" aria-hidden="true">
+    <div class="glass-top-bar"></div>
+    <div class="glass-bottom-bar"></div>
+  </div>
+
+  <!-- Status pill (playback feedback) -->
+  <div id="status-pill" class="status-pill" role="status" aria-live="polite" hidden></div>
+
+  <!-- Countdown timer (shown before walk starts) -->
+  <div id="countdown" class="countdown" role="status" aria-live="assertive" hidden>
+    <span id="countdown-number" class="countdown-number">5</span>
+    <span class="countdown-label">Get ready…</span>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading-screen" class="loading-screen" role="alert" aria-busy="true">
+    <div class="loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p class="loading-title">AR Lens</p>
+      <p id="loading-message" class="loading-message">Initializing camera…</p>
+      <div class="loading-progress">
+        <div id="loading-bar" class="loading-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tap-to-start fallback (iOS autoplay / permission UX) -->
+  <button id="tap-start" class="tap-start" type="button" hidden>
+    <span class="tap-start-icon" aria-hidden="true">👆</span>
+    <span class="tap-start-label">Tap to start experience</span>
+  </button>
+
+  <!-- Error screen -->
+  <div id="error-screen" class="error-screen" role="alert" hidden>
+    <div class="error-card">
+      <p class="error-title">Unable to start</p>
+      <p id="error-message" class="error-message"></p>
+      <button id="error-retry" class="error-retry" type="button">Try again</button>
+    </div>
+  </div>
+
+  <!-- Gesture hint -->
+  <div id="gesture-hint" class="swipe-hint" aria-hidden="true" hidden>
+    Show ✌️ peace sign — cat walks once across the screen
+  </div>
+
+  <!-- MediaPipe Hands -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+    crossorigin="anonymous"
+  ></script>
+
+  <!-- lottie-web -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"
+    crossorigin="anonymous"
+  ></script>
+
+  <script type="module" src="script.js"></script>
 </body>
 </html>
