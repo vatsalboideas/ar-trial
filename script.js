@@ -37,17 +37,27 @@ const CONFIG = {
   swipeMinDistance: 72,
   swipeMaxDuration: 450,
 
-  /** Camera constraints — front camera, mobile-friendly resolution */
-  videoConstraints: {
-    audio: false,
-    video: {
-      facingMode: 'user',
-      width: { ideal: 1280, max: 1920 },
-      height: { ideal: 720, max: 1080 },
-      frameRate: { ideal: 30, max: 30 },
-    },
+  /** Default facing mode for the camera — 'user' (front) or 'environment' (back) */
+  defaultFacingMode: 'user',
+
+  /** Base camera constraints — facingMode is set per-call via buildVideoConstraints() */
+  videoBase: {
+    width: { ideal: 1280, max: 1920 },
+    height: { ideal: 720, max: 1080 },
+    frameRate: { ideal: 30, max: 30 },
   },
 };
+
+/** Build a getUserMedia constraints object for a given facing mode. */
+function buildVideoConstraints(facingMode) {
+  return {
+    audio: false,
+    video: {
+      ...CONFIG.videoBase,
+      facingMode: { ideal: facingMode },
+    },
+  };
+}
 
 // MediaPipe finger chains (tip / pip / mcp landmark indices)
 const FINGERS = {
@@ -82,6 +92,8 @@ const els = {
   statusPill: $('#status-pill'),
   countdown: $('#countdown'),
   countdownNumber: $('#countdown-number'),
+  cameraToggle: $('#camera-toggle'),
+  cameraToggleLabel: $('#camera-toggle-label'),
 };
 
 // ---------------------------------------------------------------------------
@@ -104,6 +116,8 @@ const state = {
   countdownActive: false,
   countdownTimerId: null,
   cameraStream: null,
+  facingMode: CONFIG.defaultFacingMode,
+  isSwitchingCamera: false,
   rafId: null,
   lastSwipe: { x: 0, y: 0, t: 0 },
   currentEffectIndex: 0,
@@ -172,6 +186,65 @@ function hideError() {
 // ---------------------------------------------------------------------------
 // Camera initialization
 // ---------------------------------------------------------------------------
+function applyMirrorForFacing() {
+  // Front (user) camera = selfie mirror. Back (environment) = no mirror.
+  els.video.classList.toggle('is-mirrored', state.facingMode === 'user');
+}
+
+function updateCameraToggleUI() {
+  if (!els.cameraToggle) return;
+  const isFront = state.facingMode === 'user';
+  if (els.cameraToggleLabel) {
+    els.cameraToggleLabel.textContent = isFront ? 'Front' : 'Back';
+  }
+  els.cameraToggle.setAttribute(
+    'aria-label',
+    isFront ? 'Switch to back camera' : 'Switch to front camera'
+  );
+}
+
+/** Attach a MediaStream to the <video>, wait for metadata, and size the hands canvas. */
+function attachStream(stream) {
+  return new Promise((resolve, reject) => {
+    state.cameraStream = stream;
+    els.video.srcObject = stream;
+
+    const cleanup = () => {
+      els.video.removeEventListener('loadedmetadata', onMeta);
+      els.video.removeEventListener('error', onError);
+    };
+
+    const onMeta = () => {
+      els.video
+        .play()
+        .then(() => {
+          const w = els.video.videoWidth;
+          const h = els.video.videoHeight;
+          if (w && h) {
+            const scale = Math.min(1, 480 / Math.max(w, h));
+            els.handsCanvas.width = Math.round(w * scale);
+            els.handsCanvas.height = Math.round(h * scale);
+          }
+          applyMirrorForFacing();
+          cleanup();
+          resolve();
+        })
+        .catch((err) => {
+          cleanup();
+          reject(err);
+        });
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error('Video playback failed.'));
+    };
+
+    els.video.addEventListener('loadedmetadata', onMeta);
+    els.video.addEventListener('error', onError);
+  });
+}
+
 async function initCamera() {
   updateLoadingUI('Initializing camera…');
 
@@ -182,25 +255,16 @@ async function initCamera() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(CONFIG.videoConstraints);
-    state.cameraStream = stream;
-    els.video.srcObject = stream;
-
-    await new Promise((resolve, reject) => {
-      els.video.onloadedmetadata = () => {
-        els.video.play().then(resolve).catch(reject);
-      };
-      els.video.onerror = () => reject(new Error('Video playback failed.'));
-    });
-
-    // Size hidden canvas for MediaPipe (lower res = better FPS)
-    const scale = Math.min(1, 480 / Math.max(els.video.videoWidth, els.video.videoHeight));
-    els.handsCanvas.width = Math.round(els.video.videoWidth * scale);
-    els.handsCanvas.height = Math.round(els.video.videoHeight * scale);
+    const stream = await navigator.mediaDevices.getUserMedia(
+      buildVideoConstraints(state.facingMode)
+    );
+    await attachStream(stream);
 
     state.cameraReady = true;
     loadingSteps.camera = true;
     updateLoadingUI('Camera ready');
+    updateCameraToggleUI();
+    checkMultiCameraSupport();
     checkAllLoaded();
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -209,13 +273,87 @@ async function initCamera() {
       );
     }
     if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-      throw new Error('No front camera found on this device.');
+      throw new Error('No camera found on this device.');
     }
     if (err.name === 'NotReadableError' || err.name === 'OverconstrainedError') {
       throw new Error('Camera is in use by another app or not available right now.');
     }
     throw err;
   }
+}
+
+/** Reveal the flip button only if the device actually has multiple cameras. */
+async function checkMultiCameraSupport() {
+  if (!els.cameraToggle) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter((d) => d.kind === 'videoinput');
+    if (cams.length > 1) {
+      els.cameraToggle.hidden = false;
+    }
+  } catch {
+    // Fail open — show the toggle anyway; switchCamera() will fall back gracefully.
+    els.cameraToggle.hidden = false;
+  }
+}
+
+/** Swap between front (user) and back (environment) cameras. */
+async function switchCamera() {
+  if (state.isSwitchingCamera || !state.cameraReady) return;
+  state.isSwitchingCamera = true;
+
+  if (els.cameraToggle) {
+    els.cameraToggle.disabled = true;
+    els.cameraToggle.classList.add('is-switching');
+  }
+
+  const previous = state.facingMode;
+  const next = previous === 'user' ? 'environment' : 'user';
+
+  // Pause hand processing while the stream is being replaced.
+  stopHandLoop();
+
+  if (state.cameraStream) {
+    state.cameraStream.getTracks().forEach((t) => t.stop());
+    state.cameraStream = null;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(buildVideoConstraints(next));
+    state.facingMode = next;
+    await attachStream(stream);
+    updateCameraToggleUI();
+    setStatusPill(next === 'user' ? 'Front camera' : 'Back camera');
+    setTimeout(hideStatusPill, 1200);
+  } catch (err) {
+    console.warn('[AR Lens] Camera switch failed:', err);
+    setStatusPill('Camera switch unavailable');
+    setTimeout(hideStatusPill, 1600);
+    try {
+      const restore = await navigator.mediaDevices.getUserMedia(
+        buildVideoConstraints(previous)
+      );
+      state.facingMode = previous;
+      await attachStream(restore);
+      updateCameraToggleUI();
+    } catch {
+      /* nothing else we can do — leave video blank */
+    }
+  } finally {
+    state.isSwitchingCamera = false;
+    if (els.cameraToggle) {
+      els.cameraToggle.disabled = false;
+      els.cameraToggle.classList.remove('is-switching');
+    }
+    if (state.experienceStarted && CONFIG.enablePeaceGesture) {
+      startHandLoop();
+    }
+  }
+}
+
+function bindCameraToggle() {
+  if (!els.cameraToggle) return;
+  els.cameraToggle.addEventListener('click', () => switchCamera());
 }
 
 // ---------------------------------------------------------------------------
@@ -653,6 +791,14 @@ function teardown() {
     state.cameraStream = null;
   }
   state.experienceStarted = false;
+  state.facingMode = CONFIG.defaultFacingMode;
+  state.isSwitchingCamera = false;
+  if (els.cameraToggle) {
+    els.cameraToggle.hidden = true;
+    els.cameraToggle.disabled = false;
+    els.cameraToggle.classList.remove('is-switching');
+  }
+  els.video.classList.remove('is-mirrored');
   Object.keys(loadingSteps).forEach((k) => {
     loadingSteps[k] = false;
   });
@@ -699,6 +845,7 @@ function init() {
   bindWalkAnimation();
   bindTapToStart();
   bindPlaybackControls();
+  bindCameraToggle();
   initSwipeGestures();
   initVisibilityHandling();
 

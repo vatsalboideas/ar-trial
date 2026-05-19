@@ -49,8 +49,13 @@ body {
   height: 100%;
   object-fit: cover;
   z-index: 0;
-  transform: scaleX(-1); /* mirror for selfie-style UX */
   background: #000;
+  transition: transform var(--transition-smooth);
+}
+
+/* Selfie-style mirror only when using the front (user) camera */
+.camera-feed.is-mirrored {
+  transform: scaleX(-1);
 }
 
 /* --------------------------------------------------------------------------
@@ -328,6 +333,69 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Camera flip button (front ↔ back)
+   -------------------------------------------------------------------------- */
+.camera-toggle {
+  position: fixed;
+  top: calc(16px + var(--safe-top));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px 9px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass);
+  color: rgba(255, 255, 255, 0.94);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  transition: transform var(--transition-fast), opacity var(--transition-fast),
+    border-color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.camera-toggle[hidden] {
+  display: none !important;
+}
+
+.camera-toggle:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.camera-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.camera-toggle:not(:disabled):hover {
+  border-color: rgba(94, 232, 184, 0.45);
+}
+
+.camera-toggle-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.camera-toggle.is-switching .camera-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.camera-toggle-label {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
    Loading screen
    -------------------------------------------------------------------------- */
 .loading-screen {
@@ -601,6 +669,11 @@ body {
 
   .countdown-label {
     font-size: 0.82rem;
+  }
+
+  .camera-toggle {
+    padding: 8px 12px 8px 10px;
+    font-size: 0.72rem;
   }
 }
 
