@@ -9,8 +9,8 @@
 const CONFIG = {
   /** Alpha overlay — converted exports (not the huge ProRes .mov) */
   overlayVideos: {
-    webm: 'assets/videos/Foreground_Cats_with_Supers.webm',
-    hevc: 'assets/videos/Foreground_Cats_with_Supers_hevc.mov',
+    webm: 'assets/videos/Foreground_Cats_with_Supers1.webm',
+    hevc: 'assets/videos/Foreground_Cats_with_Supers_hevc1.mov',
   },
 
   /** Countdown seconds before overlay plays */
