@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Fullscreen camera background -->
+  <!-- Layer stack (bottom → top): camera → alpha overlay -->
   <video
     id="camera-feed"
     class="camera-feed"
@@ -22,18 +22,16 @@
     aria-hidden="true"
   ></video>
 
-  <!-- Cat walks left → right across the screen -->
-  <div id="lottie-walker" class="lottie-walker" aria-hidden="true">
-    <div id="lottie-container" class="lottie-overlay"></div>
-  </div>
-
-  <!-- Bottom dock: Play / Pause -->
-  <div id="lottie-dock" class="lottie-dock">
-    <div id="playback-controls" class="playback-controls" hidden>
-      <button id="btn-play" class="playback-btn playback-btn--play" type="button">Play</button>
-      <button id="btn-pause" class="playback-btn playback-btn--pause" type="button" disabled>Pause</button>
-    </div>
-  </div>
+  <video
+    id="overlay-video"
+    class="overlay-video"
+    autoplay
+    playsinline
+    muted
+    loop
+    preload="auto"
+    aria-hidden="true"
+  ></video>
 
   <!-- Camera flip (front / back) -->
   <button
@@ -47,22 +45,8 @@
     <span id="camera-toggle-label" class="camera-toggle-label">Front</span>
   </button>
 
-  <canvas id="hands-canvas" class="hands-canvas" aria-hidden="true"></canvas>
-
-  <!-- Premium glass UI chrome -->
-  <div class="glass-chrome" aria-hidden="true">
-    <div class="glass-top-bar"></div>
-    <div class="glass-bottom-bar"></div>
-  </div>
-
-  <!-- Status pill (playback feedback) -->
+  <!-- Status pill -->
   <div id="status-pill" class="status-pill" role="status" aria-live="polite" hidden></div>
-
-  <!-- Countdown timer (shown before walk starts) -->
-  <div id="countdown" class="countdown" role="status" aria-live="assertive" hidden>
-    <span id="countdown-number" class="countdown-number">5</span>
-    <span class="countdown-label">Get ready…</span>
-  </div>
 
   <!-- Loading screen -->
   <div id="loading-screen" class="loading-screen" role="alert" aria-busy="true">
@@ -90,23 +74,6 @@
       <button id="error-retry" class="error-retry" type="button">Try again</button>
     </div>
   </div>
-
-  <!-- Gesture hint -->
-  <div id="gesture-hint" class="swipe-hint" aria-hidden="true" hidden>
-    Show ✌️ peace sign — cat walks once across the screen
-  </div>
-
-  <!-- MediaPipe Hands -->
-  <script
-    src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
-    crossorigin="anonymous"
-  ></script>
-
-  <!-- lottie-web -->
-  <script
-    src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"
-    crossorigin="anonymous"
-  ></script>
 
   <script type="module" src="script.js"></script>
 </body>

@@ -17,10 +17,6 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  /* Constrain by width AND height so the cat never crowds the screen.
-     Tuned per breakpoint below for tablets / phones / landscape. */
-  --lottie-size: min(44vw, 38vh, 320px);
-  --walker-bottom: 26%;
   --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -40,7 +36,7 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   Camera feed — fullscreen mirrored background
+   Video layers — camera (back) → alpha overlay (front)
    -------------------------------------------------------------------------- */
 .camera-feed {
   position: fixed;
@@ -53,248 +49,21 @@ body {
   transition: transform var(--transition-smooth);
 }
 
+/* Foreground alpha video — transparent pixels show the camera */
+.overlay-video {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  background: transparent;
+  pointer-events: none;
+}
+
 /* Selfie-style mirror only when using the front (user) camera */
 .camera-feed.is-mirrored {
   transform: scaleX(-1);
-}
-
-/* --------------------------------------------------------------------------
-   Bottom dock — controls + Lottie cat
-   -------------------------------------------------------------------------- */
-.lottie-dock {
-  position: fixed;
-  left: 50%;
-  bottom: calc(16px + var(--safe-bottom));
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.lottie-walker.is-ready .lottie-overlay {
-  opacity: 1;
-}
-
-/* Playback controls */
-.playback-controls {
-  display: flex;
-  gap: 10px;
-  pointer-events: auto;
-}
-
-.playback-controls[hidden] {
-  display: none !important;
-}
-
-.playback-btn {
-  min-width: 108px;
-  padding: 12px 20px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  transition: transform var(--transition-fast), opacity var(--transition-fast), filter var(--transition-fast);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-}
-
-.playback-btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.playback-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.playback-btn--play {
-  background: linear-gradient(180deg, var(--accent), #3bc998);
-  color: #0a1a12;
-  border-color: transparent;
-}
-
-.playback-btn--pause {
-  background: var(--glass);
-  color: #fff;
-}
-
-.playback-btn--pause:not(:disabled) {
-  border-color: rgba(255, 115, 191, 0.45);
-}
-
-/* Full-width track — cat walks left → right */
-.lottie-walker {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--walker-bottom) + var(--safe-bottom));
-  height: var(--lottie-size);
-  z-index: 10;
-  pointer-events: none;
-  overflow: visible;
-}
-
-/* Lottie cat — starts left, walks to right edge of track */
-.lottie-overlay {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: var(--lottie-size);
-  height: var(--lottie-size);
-  pointer-events: none;
-  opacity: 0;
-  transform-origin: center bottom;
-  transition: opacity var(--transition-smooth);
-}
-
-/* Flip if the Lottie asset faces left by default */
-.lottie-overlay.is-facing-right {
-  transform: scaleX(-1);
-}
-
-.lottie-overlay.is-walking {
-  animation: cat-walk-across var(--walk-duration, 5s) linear forwards;
-}
-
-@keyframes cat-walk-across {
-  from {
-    left: 0;
-  }
-  to {
-    left: calc(100% - var(--lottie-size));
-  }
-}
-
-.lottie-overlay svg {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* --------------------------------------------------------------------------
-   Countdown overlay — shows before the walk starts
-   -------------------------------------------------------------------------- */
-.countdown {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(10, 10, 18, 0.55) 0%,
-    rgba(10, 10, 18, 0.2) 45%,
-    transparent 75%
-  );
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  transition: opacity var(--transition-smooth);
-}
-
-.countdown[hidden] {
-  display: none !important;
-}
-
-.countdown-number {
-  font-size: clamp(7rem, 32vw, 18rem);
-  font-weight: 800;
-  line-height: 1;
-  color: #fff;
-  text-shadow:
-    0 0 24px rgba(94, 232, 184, 0.55),
-    0 4px 32px rgba(0, 0, 0, 0.55);
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  animation: countdown-pulse 1s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.countdown-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
-}
-
-@keyframes countdown-pulse {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  30% {
-    transform: scale(1.18);
-    opacity: 1;
-  }
-  60% {
-    transform: scale(1);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Hidden processing canvas (off-screen, zero layout impact) */
-.hands-canvas {
-  position: fixed;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-  z-index: -1;
-}
-
-/* --------------------------------------------------------------------------
-   Glass chrome — subtle blur bars top & bottom
-   -------------------------------------------------------------------------- */
-.glass-chrome {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.glass-top-bar,
-.glass-bottom-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: calc(72px + var(--safe-top));
-  background: linear-gradient(
-    180deg,
-    rgba(8, 10, 18, 0.55) 0%,
-    transparent 100%
-  );
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.glass-top-bar {
-  top: 0;
-  padding-top: var(--safe-top);
-}
-
-.glass-bottom-bar {
-  bottom: 0;
-  height: calc(96px + var(--safe-bottom));
-  background: linear-gradient(
-    0deg,
-    rgba(8, 10, 18, 0.6) 0%,
-    transparent 100%
-  );
-  padding-bottom: var(--safe-bottom);
 }
 
 /* --------------------------------------------------------------------------
@@ -588,121 +357,18 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* --------------------------------------------------------------------------
-   Swipe hint (bonus)
-   -------------------------------------------------------------------------- */
-.swipe-hint {
-  position: fixed;
-  bottom: calc(24px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.45);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  pointer-events: none;
-  animation: swipe-fade 2.5s ease-in-out infinite;
-}
-
-.swipe-hint[hidden] {
-  display: none !important;
-}
-
-@keyframes swipe-fade {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.75;
-  }
-}
-
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner,
-  .tap-start-icon,
-  .swipe-hint {
+  .tap-start-icon {
     animation: none;
-  }
-
-  .lottie-overlay,
-  .playback-btn {
-    transition: none;
-  }
-}
-
-/* --------------------------------------------------------------------------
-   Responsive breakpoints — keep the cat from crowding small viewports.
-   The cat must stay small enough that the walking track has real distance.
-   -------------------------------------------------------------------------- */
-
-/* Tablets & small laptops */
-@media (max-width: 900px) {
-  :root {
-    --lottie-size: min(40vw, 36vh, 280px);
-    --walker-bottom: 24%;
   }
 }
 
 /* Phones (portrait) */
 @media (max-width: 600px) {
-  :root {
-    --lottie-size: min(38vw, 30vh, 200px);
-    --walker-bottom: 22%;
-  }
-
-  .playback-btn {
-    min-width: 92px;
-    padding: 10px 16px;
-    font-size: 0.82rem;
-  }
-
-  .playback-controls {
-    gap: 8px;
-  }
-
-  .countdown-number {
-    font-size: clamp(4.5rem, 22vw, 9rem);
-  }
-
-  .countdown-label {
-    font-size: 0.82rem;
-  }
-
   .camera-toggle {
     padding: 8px 12px 8px 10px;
     font-size: 0.72rem;
-  }
-}
-
-/* Small phones */
-@media (max-width: 380px) {
-  :root {
-    --lottie-size: min(42vw, 28vh, 160px);
-    --walker-bottom: 20%;
-  }
-
-  .playback-btn {
-    min-width: 84px;
-    padding: 9px 14px;
-    font-size: 0.78rem;
-  }
-}
-
-/* Landscape phones — height is the constraint, not width */
-@media (max-height: 480px) and (orientation: landscape) {
-  :root {
-    --lottie-size: min(26vw, 58vh, 220px);
-    --walker-bottom: 18%;
-  }
-
-  .countdown-number {
-    font-size: clamp(3rem, 14vw, 7rem);
-  }
-
-  .countdown-label {
-    font-size: 0.75rem;
   }
 }
