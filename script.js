@@ -13,6 +13,9 @@ const CONFIG = {
     hevc: 'assets/videos/Foreground_Cats_with_Supers_hevc.mov',
   },
 
+  /** Countdown seconds before overlay plays */
+  countdownSeconds: 3,
+
   /** Default facing mode — 'user' (front) or 'environment' (back) */
   defaultFacingMode: 'user',
 
@@ -41,6 +44,12 @@ const $ = (sel) => document.querySelector(sel);
 const els = {
   video: $('#camera-feed'),
   overlayVideo: $('#overlay-video'),
+  captureCanvas: $('#capture-canvas'),
+  playbackControls: $('#playback-controls'),
+  btnPlay: $('#btn-play'),
+  btnPause: $('#btn-pause'),
+  countdown: $('#countdown'),
+  countdownNumber: $('#countdown-number'),
   loadingScreen: $('#loading-screen'),
   loadingMessage: $('#loading-message'),
   loadingBar: $('#loading-bar'),
@@ -56,6 +65,9 @@ const els = {
 const state = {
   cameraReady: false,
   experienceStarted: false,
+  isPlaying: false,
+  countdownActive: false,
+  countdownTimerId: null,
   cameraStream: null,
   facingMode: CONFIG.defaultFacingMode,
   isSwitchingCamera: false,
@@ -78,6 +90,7 @@ function checkAllLoaded() {
 
   updateLoadingUI('Ready');
   els.loadingScreen.classList.add('is-hidden');
+  showPlaybackControls();
 
   if (needsTapToStart()) {
     els.tapStart.hidden = false;
@@ -120,7 +133,37 @@ function hideError() {
   els.errorScreen.hidden = true;
 }
 
-function waitForVideoReady(video, { label = 'video' } = {}) {
+/** Draw image/video with object-fit: cover */
+function drawCover(ctx, source, cw, ch, { mirror = false } = {}) {
+  const iw = source.videoWidth || source.width || 0;
+  const ih = source.videoHeight || source.height || 0;
+  if (!iw || !ih) return;
+
+  const scale = Math.max(cw / iw, ch / ih);
+  const sw = iw * scale;
+  const sh = ih * scale;
+  const dx = (cw - sw) / 2;
+  const dy = (ch - sh) / 2;
+
+  ctx.save();
+  if (mirror) {
+    ctx.translate(dx + sw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(source, 0, 0, sw, sh);
+  } else {
+    ctx.drawImage(source, dx, dy, sw, sh);
+  }
+  ctx.restore();
+}
+
+function resizeCaptureCanvas() {
+  if (!els.captureCanvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  els.captureCanvas.width = Math.round(window.innerWidth * dpr);
+  els.captureCanvas.height = Math.round(window.innerHeight * dpr);
+}
+
+function waitForVideoReady(video, { label = 'video', autoplay = false } = {}) {
   return new Promise((resolve, reject) => {
     let settled = false;
 
@@ -133,14 +176,17 @@ function waitForVideoReady(video, { label = 'video' } = {}) {
       else resolve();
     };
 
-    const tryPlay = () => {
-      // Autoplay may be blocked until tap — that must not block the loading screen.
-      video.play().catch(() => {}).finally(() => finish());
+    const tryFinish = () => {
+      if (autoplay) {
+        video.play().catch(() => {}).finally(() => finish());
+      } else {
+        finish();
+      }
     };
 
     const onUsable = () => {
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-      tryPlay();
+      tryFinish();
     };
 
     const onError = () => {
@@ -162,7 +208,7 @@ function waitForVideoReady(video, { label = 'video' } = {}) {
 
     const timer = setTimeout(() => {
       if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        tryPlay();
+        tryFinish();
         return;
       }
       finish(
@@ -173,7 +219,7 @@ function waitForVideoReady(video, { label = 'video' } = {}) {
     }, 30000);
 
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      tryPlay();
+      tryFinish();
       return;
     }
 
@@ -197,11 +243,152 @@ async function initOverlayVideo() {
     source.type = type;
     els.overlayVideo.append(source);
   }
+  els.overlayVideo.loop = false;
   els.overlayVideo.load();
-  await waitForVideoReady(els.overlayVideo, { label: 'overlay' });
+  await waitForVideoReady(els.overlayVideo, { label: 'overlay', autoplay: false });
+  els.overlayVideo.pause();
+  els.overlayVideo.currentTime = 0;
+  els.overlayVideo.addEventListener('ended', onOverlayEnded);
   loadingSteps.overlayVideo = true;
   updateLoadingUI('Overlay ready');
   checkAllLoaded();
+}
+
+// ---------------------------------------------------------------------------
+// Playback — 3s countdown, play once, PNG capture at end
+// ---------------------------------------------------------------------------
+function showPlaybackControls() {
+  if (els.playbackControls) els.playbackControls.hidden = false;
+  updatePlaybackButtons();
+}
+
+function updatePlaybackButtons() {
+  if (!els.btnPlay || !els.btnPause) return;
+  els.btnPlay.disabled = state.countdownActive || state.isPlaying;
+  els.btnPause.disabled = !state.isPlaying;
+}
+
+function showCountdown(n) {
+  if (!els.countdown || !els.countdownNumber) return;
+  els.countdown.hidden = false;
+  els.countdownNumber.textContent = String(n);
+  els.countdownNumber.style.animation = 'none';
+  void els.countdownNumber.offsetWidth;
+  els.countdownNumber.style.animation = '';
+}
+
+function hideCountdown() {
+  if (els.countdown) els.countdown.hidden = true;
+}
+
+function cancelCountdown() {
+  if (state.countdownTimerId) {
+    clearInterval(state.countdownTimerId);
+    state.countdownTimerId = null;
+  }
+  state.countdownActive = false;
+  hideCountdown();
+  updatePlaybackButtons();
+}
+
+function startCountdownThenPlay() {
+  if (state.countdownActive || state.isPlaying) return;
+
+  cancelCountdown();
+  state.countdownActive = true;
+  updatePlaybackButtons();
+
+  let remaining = CONFIG.countdownSeconds;
+  showCountdown(remaining);
+  setStatusPill('Starting in…', { playing: true });
+
+  state.countdownTimerId = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) {
+      showCountdown(remaining);
+    } else {
+      cancelCountdown();
+      beginPlayback();
+    }
+  }, 1000);
+}
+
+async function beginPlayback() {
+  if (!els.overlayVideo) return;
+
+  els.overlayVideo.pause();
+  els.overlayVideo.currentTime = 0;
+
+  try {
+    await els.overlayVideo.play();
+  } catch {
+    setStatusPill('Tap Play to start');
+    updatePlaybackButtons();
+    return;
+  }
+
+  state.isPlaying = true;
+  updatePlaybackButtons();
+  setStatusPill('Playing…', { playing: true });
+}
+
+function pausePlayback() {
+  cancelCountdown();
+  els.overlayVideo?.pause();
+  state.isPlaying = false;
+  updatePlaybackButtons();
+  setStatusPill('Paused');
+  setTimeout(hideStatusPill, 1200);
+}
+
+function drawCompositeToCaptureCanvas() {
+  if (!els.captureCanvas) return;
+  const ctx = els.captureCanvas.getContext('2d');
+  const w = els.captureCanvas.width;
+  const h = els.captureCanvas.height;
+  ctx.clearRect(0, 0, w, h);
+  drawCover(ctx, els.video, w, h, { mirror: state.facingMode === 'user' });
+  drawCover(ctx, els.overlayVideo, w, h);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function captureCompositeSnapshot() {
+  resizeCaptureCanvas();
+  drawCompositeToCaptureCanvas();
+
+  const blob = await new Promise((resolve) => {
+    els.captureCanvas.toBlob((b) => resolve(b), 'image/png');
+  });
+
+  if (blob) {
+    downloadBlob(blob, `ar-lens-${Date.now()}.png`);
+  }
+}
+
+async function onOverlayEnded() {
+  state.isPlaying = false;
+  drawCompositeToCaptureCanvas();
+  await captureCompositeSnapshot();
+
+  updatePlaybackButtons();
+  setStatusPill('Photo saved — tap Play to replay');
+  setTimeout(hideStatusPill, 4000);
+}
+
+function bindPlaybackControls() {
+  els.btnPlay?.addEventListener('click', () => startCountdownThenPlay());
+  els.btnPause?.addEventListener('click', () => pausePlayback());
 }
 
 function applyMirrorForFacing() {
@@ -374,27 +561,26 @@ function startExperience() {
   if (state.experienceStarted) return;
   state.experienceStarted = true;
   els.tapStart.hidden = true;
+  showPlaybackControls();
+  els.video.play().catch(() => {});
 }
 
 function bindTapToStart() {
   els.tapStart.addEventListener('click', async () => {
-    await Promise.all(
-      [els.video, els.overlayVideo].map((v) =>
-        v.play().catch(() => {
-          /* already playing or blocked */
-        })
-      )
-    );
+    await els.video.play().catch(() => {});
     startExperience();
   });
 }
 
 function teardown() {
+  cancelCountdown();
+  pausePlayback();
   if (state.cameraStream) {
     state.cameraStream.getTracks().forEach((t) => t.stop());
     state.cameraStream = null;
   }
   state.experienceStarted = false;
+  state.isPlaying = false;
   state.facingMode = CONFIG.defaultFacingMode;
   state.isSwitchingCamera = false;
   if (els.cameraToggle) {
@@ -404,6 +590,7 @@ function teardown() {
   }
   els.video.classList.remove('is-mirrored');
   if (els.overlayVideo) {
+    els.overlayVideo.removeEventListener('ended', onOverlayEnded);
     els.overlayVideo.pause();
     els.overlayVideo.replaceChildren();
     els.overlayVideo.load();
@@ -431,9 +618,8 @@ async function boot() {
 function initVisibilityHandling() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      els.overlayVideo?.pause();
-    } else if (state.experienceStarted || !needsTapToStart()) {
-      els.overlayVideo?.play().catch(() => {});
+      if (state.isPlaying) pausePlayback();
+    } else {
       els.video?.play().catch(() => {});
     }
   });
@@ -441,14 +627,18 @@ function initVisibilityHandling() {
 
 function init() {
   bindTapToStart();
+  bindPlaybackControls();
   bindCameraToggle();
   initVisibilityHandling();
+  window.addEventListener('resize', resizeCaptureCanvas);
 
   els.errorRetry.addEventListener('click', () => {
     teardown();
+    window.removeEventListener('resize', resizeCaptureCanvas);
     boot();
   });
 
+  resizeCaptureCanvas();
   boot();
 }
 

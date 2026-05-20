@@ -25,13 +25,26 @@
   <video
     id="overlay-video"
     class="overlay-video"
-    autoplay
     playsinline
     muted
-    loop
     preload="auto"
     aria-hidden="true"
   ></video>
+
+  <canvas id="capture-canvas" class="capture-canvas" aria-hidden="true"></canvas>
+
+  <!-- Play / Pause -->
+  <div id="playback-dock" class="playback-dock">
+    <div id="playback-controls" class="playback-controls" hidden>
+      <button id="btn-play" class="playback-btn playback-btn--play" type="button">Play</button>
+      <button id="btn-pause" class="playback-btn playback-btn--pause" type="button" disabled>Pause</button>
+    </div>
+  </div>
+
+  <!-- Countdown before play -->
+  <div id="countdown" class="countdown" role="status" aria-live="assertive" hidden>
+    <span id="countdown-number" class="countdown-number">3</span>
+  </div>
 
   <!-- Camera flip (front / back) -->
   <button

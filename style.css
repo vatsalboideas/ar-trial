@@ -66,6 +66,127 @@ body {
   transform: scaleX(-1);
 }
 
+.capture-canvas {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* --------------------------------------------------------------------------
+   Playback controls
+   -------------------------------------------------------------------------- */
+.playback-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 20;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.playback-controls {
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.playback-controls[hidden] {
+  display: none !important;
+}
+
+.playback-btn {
+  min-width: 108px;
+  padding: 12px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.playback-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.playback-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.playback-btn--play {
+  background: linear-gradient(180deg, var(--accent), #3bc998);
+  color: #0a1a12;
+  border-color: transparent;
+}
+
+.playback-btn--pause {
+  background: var(--glass);
+  color: #fff;
+}
+
+.playback-btn--pause:not(:disabled) {
+  border-color: rgba(255, 115, 191, 0.45);
+}
+
+/* --------------------------------------------------------------------------
+   Countdown overlay
+   -------------------------------------------------------------------------- */
+.countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(10, 10, 18, 0.5) 0%,
+    transparent 70%
+  );
+}
+
+.countdown[hidden] {
+  display: none !important;
+}
+
+.countdown-number {
+  font-size: clamp(5rem, 28vw, 12rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 24px rgba(94, 232, 184, 0.55),
+    0 4px 32px rgba(0, 0, 0, 0.55);
+  font-variant-numeric: tabular-nums;
+  animation: countdown-pulse 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes countdown-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Status pill — gesture feedback
    -------------------------------------------------------------------------- */
@@ -370,5 +491,21 @@ body {
   .camera-toggle {
     padding: 8px 12px 8px 10px;
     font-size: 0.72rem;
+  }
+
+  .playback-btn {
+    min-width: 92px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+  }
+
+  .countdown-number {
+    font-size: clamp(4rem, 22vw, 8rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown-number {
+    animation: none;
   }
 }
