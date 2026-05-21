@@ -123,12 +123,18 @@ function updateLoadingUI(message) {
 }
 
 function checkAllLoaded() {
-  if (!loadingSteps.camera || !loadingSteps.overlayVideo) return;
+  if (!loadingSteps.overlayVideo) return;
+  if (!isIOS() && !loadingSteps.camera) return;
 
   updateLoadingUI('Ready');
   els.loadingScreen.classList.add('is-hidden');
-  showPlaybackControls();
 
+  if (isIOS() && !state.cameraReady) {
+    els.tapStart.hidden = false;
+    return;
+  }
+
+  showPlaybackControls();
   if (needsTapToStart()) {
     els.tapStart.hidden = false;
   } else {
@@ -337,21 +343,14 @@ function cancelCountdown() {
   updatePlaybackButtons();
 }
 
-/** iOS requires play() inside a user gesture — unlock camera + overlay. */
-async function unlockMediaFromGesture() {
+/** iOS: only start camera here — never await overlay.play() (it can hang forever). */
+async function startCameraFromGesture() {
   applyInlineVideoAttrs(els.video);
-  applyInlineVideoAttrs(els.overlayVideo);
+  if (!state.cameraStream) return;
   try {
     await els.video.play();
-  } catch {
-    /* may stay paused until stream ready */
-  }
-  try {
-    await els.overlayVideo.play();
-    els.overlayVideo.pause();
-    safeSetCurrentTime(els.overlayVideo, 0);
-  } catch {
-    /* ok — will play after countdown */
+  } catch (err) {
+    console.warn('[AR Lens] camera play failed:', err);
   }
 }
 
@@ -534,10 +533,38 @@ async function onOverlayEnded() {
 }
 
 function bindPlaybackControls() {
-  els.btnPlay?.addEventListener('click', async () => {
-    await unlockMediaFromGesture();
-    startCountdownThenPlay();
-  });
+  let playLock = false;
+
+  const onPlay = async () => {
+    if (playLock) return;
+    playLock = true;
+    try {
+      if (!state.experienceStarted) {
+        await handleTapToStart();
+      }
+      await startCameraFromGesture();
+      startCountdownThenPlay();
+    } finally {
+      setTimeout(() => {
+        playLock = false;
+      }, 500);
+    }
+  };
+
+  const bindPlay = (handler) => {
+    els.btnPlay?.addEventListener('touchend', handler, { passive: false });
+    els.btnPlay?.addEventListener('click', handler);
+  };
+
+  if (isIOS()) {
+    bindPlay((e) => {
+      e.preventDefault();
+      void onPlay();
+    });
+  } else {
+    els.btnPlay?.addEventListener('click', () => void onPlay());
+  }
+
   els.btnPause?.addEventListener('click', () => pausePlayback());
 }
 
@@ -613,7 +640,9 @@ async function initCamera() {
     updateLoadingUI('Camera ready');
     updateCameraToggleUI();
     checkMultiCameraSupport();
-    checkAllLoaded();
+    if (!isIOS() || state.experienceStarted) {
+      checkAllLoaded();
+    }
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
       throw new Error(
@@ -713,15 +742,50 @@ function startExperience() {
   if (state.experienceStarted) return;
   state.experienceStarted = true;
   els.tapStart.hidden = true;
+  els.loadingScreen.classList.add('is-hidden');
   showPlaybackControls();
-  els.video.play().catch(() => {});
+}
+
+async function handleTapToStart() {
+  if (state.experienceStarted) return;
+
+  els.tapStart.hidden = true;
+  startExperience();
+
+  if (!state.cameraReady) {
+    setStatusPill('Starting camera…');
+    try {
+      await initCamera();
+    } catch (err) {
+      state.experienceStarted = false;
+      els.tapStart.hidden = false;
+      showError(err.message || 'Could not start the camera.');
+      return;
+    }
+  }
+
+  await startCameraFromGesture();
+  setStatusPill('Tap Play to begin');
+  setTimeout(hideStatusPill, 2500);
 }
 
 function bindTapToStart() {
-  els.tapStart.addEventListener('click', async () => {
-    await unlockMediaFromGesture();
-    startExperience();
-  });
+  if (!els.tapStart) return;
+
+  let handled = false;
+  const onTap = (e) => {
+    if (handled) return;
+    handled = true;
+    e.preventDefault();
+    void handleTapToStart().finally(() => {
+      setTimeout(() => {
+        handled = false;
+      }, 600);
+    });
+  };
+
+  els.tapStart.addEventListener('touchend', onTap, { passive: false });
+  els.tapStart.addEventListener('click', onTap);
 }
 
 function teardown() {
@@ -762,7 +826,6 @@ async function boot() {
     applyInlineVideoAttrs(els.overlayVideo);
     if (isIOS()) {
       await initOverlayVideo();
-      await initCamera();
     } else {
       await initCamera();
       await initOverlayVideo();
