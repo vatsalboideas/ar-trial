@@ -425,6 +425,64 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Capture preview (iOS save)
+   -------------------------------------------------------------------------- */
+.capture-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 10, 18, 0.92);
+}
+
+.capture-preview[hidden] {
+  display: none !important;
+}
+
+.capture-preview-card {
+  width: min(92vw, 360px);
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  text-align: center;
+}
+
+.capture-preview-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.capture-preview-img {
+  width: 100%;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.capture-preview-hint {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.capture-preview-close {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), #3bc998);
+  color: #0a1a12;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
    Error screen
    -------------------------------------------------------------------------- */
 .error-screen {

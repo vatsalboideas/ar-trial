@@ -18,6 +18,7 @@
     class="camera-feed"
     autoplay
     playsinline
+    webkit-playsinline
     muted
     aria-hidden="true"
   ></video>
@@ -26,6 +27,7 @@
     id="overlay-video"
     class="overlay-video"
     playsinline
+    webkit-playsinline
     muted
     preload="auto"
     aria-hidden="true"
@@ -79,6 +81,16 @@
     <span class="tap-start-label">Tap to start experience</span>
   </button>
 
+  <!-- Photo preview (iOS — long-press to save) -->
+  <div id="capture-preview" class="capture-preview" hidden>
+    <div class="capture-preview-card">
+      <p class="capture-preview-title">Photo ready</p>
+      <img id="capture-preview-img" class="capture-preview-img" alt="AR capture" />
+      <p id="capture-preview-hint" class="capture-preview-hint"></p>
+      <button id="capture-preview-close" class="capture-preview-close" type="button">Done</button>
+    </div>
+  </div>
+
   <!-- Error screen -->
   <div id="error-screen" class="error-screen" role="alert" hidden>
     <div class="error-card">
@@ -88,6 +100,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js"></script>
+  <script src="script.js" defer></script>
 </body>
 </html>
