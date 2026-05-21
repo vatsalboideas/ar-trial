@@ -86,7 +86,6 @@ const els = {
   loadingScreen: $('#loading-screen'),
   loadingMessage: $('#loading-message'),
   loadingBar: $('#loading-bar'),
-  tapStart: $('#tap-start'),
   errorScreen: $('#error-screen'),
   errorMessage: $('#error-message'),
   errorRetry: $('#error-retry'),
@@ -123,27 +122,10 @@ function updateLoadingUI(message) {
 }
 
 function checkAllLoaded() {
-  if (!loadingSteps.overlayVideo) return;
-  if (!isIOS() && !loadingSteps.camera) return;
+  if (!loadingSteps.camera || !loadingSteps.overlayVideo) return;
 
   updateLoadingUI('Ready');
-  els.loadingScreen.classList.add('is-hidden');
-
-  if (isIOS() && !state.cameraReady) {
-    els.tapStart.hidden = false;
-    return;
-  }
-
-  showPlaybackControls();
-  if (needsTapToStart()) {
-    els.tapStart.hidden = false;
-  } else {
-    startExperience();
-  }
-}
-
-function needsTapToStart() {
-  return isIOS();
+  startExperience();
 }
 
 function getOverlaySources() {
@@ -159,7 +141,6 @@ function getOverlaySources() {
 
 function showError(message) {
   els.loadingScreen.classList.add('is-hidden');
-  els.tapStart.hidden = true;
   els.errorMessage.textContent = message;
   els.errorScreen.hidden = false;
 }
@@ -539,9 +520,6 @@ function bindPlaybackControls() {
     if (playLock) return;
     playLock = true;
     try {
-      if (!state.experienceStarted) {
-        await handleTapToStart();
-      }
       await startCameraFromGesture();
       startCountdownThenPlay();
     } finally {
@@ -640,9 +618,7 @@ async function initCamera() {
     updateLoadingUI('Camera ready');
     updateCameraToggleUI();
     checkMultiCameraSupport();
-    if (!isIOS() || state.experienceStarted) {
-      checkAllLoaded();
-    }
+    checkAllLoaded();
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
       throw new Error(
@@ -741,51 +717,11 @@ function hideStatusPill() {
 function startExperience() {
   if (state.experienceStarted) return;
   state.experienceStarted = true;
-  els.tapStart.hidden = true;
   els.loadingScreen.classList.add('is-hidden');
   showPlaybackControls();
-}
-
-async function handleTapToStart() {
-  if (state.experienceStarted) return;
-
-  els.tapStart.hidden = true;
-  startExperience();
-
-  if (!state.cameraReady) {
-    setStatusPill('Starting camera…');
-    try {
-      await initCamera();
-    } catch (err) {
-      state.experienceStarted = false;
-      els.tapStart.hidden = false;
-      showError(err.message || 'Could not start the camera.');
-      return;
-    }
-  }
-
-  await startCameraFromGesture();
+  void startCameraFromGesture();
   setStatusPill('Tap Play to begin');
   setTimeout(hideStatusPill, 2500);
-}
-
-function bindTapToStart() {
-  if (!els.tapStart) return;
-
-  let handled = false;
-  const onTap = (e) => {
-    if (handled) return;
-    handled = true;
-    e.preventDefault();
-    void handleTapToStart().finally(() => {
-      setTimeout(() => {
-        handled = false;
-      }, 600);
-    });
-  };
-
-  els.tapStart.addEventListener('touchend', onTap, { passive: false });
-  els.tapStart.addEventListener('click', onTap);
 }
 
 function teardown() {
@@ -824,12 +760,8 @@ async function boot() {
   try {
     applyInlineVideoAttrs(els.video);
     applyInlineVideoAttrs(els.overlayVideo);
-    if (isIOS()) {
-      await initOverlayVideo();
-    } else {
-      await initCamera();
-      await initOverlayVideo();
-    }
+    await initCamera();
+    await initOverlayVideo();
   } catch (err) {
     console.error('[AR Lens]', err);
     showError(err.message || 'Something went wrong. Please try again.');
@@ -847,7 +779,6 @@ function initVisibilityHandling() {
 }
 
 function init() {
-  bindTapToStart();
   bindPlaybackControls();
   bindCapturePreview();
   bindCameraToggle();
