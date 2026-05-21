@@ -1,77 +1,16 @@
 /**
- * AR Lens — live camera behind a transparent (alpha) overlay video
- * Vanilla JS
+ * AR Lens — camera behind alpha overlay video
  */
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
 const CONFIG = {
-  /** Alpha overlay — converted exports (not the huge ProRes .mov) */
   overlayVideos: {
     webm: 'assets/videos/Foreground_Cats_with_Supers1.webm',
     hevc: 'assets/videos/Foreground_Cats_with_Supers_hevc1.mov',
   },
-
-  /** Countdown seconds before overlay plays */
   countdownSeconds: 3,
-
-  /** Default facing mode — 'user' (front) or 'environment' (back) */
   defaultFacingMode: 'user',
-
-  videoBase: {
-    width: { ideal: 1280, max: 1920 },
-    height: { ideal: 720, max: 1080 },
-    frameRate: { ideal: 30, max: 30 },
-  },
 };
 
-function isIOS() {
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  );
-}
-
-/** All browsers on iOS use WebKit — treat as Safari for video codecs. */
-function isSafariLike() {
-  if (isIOS()) return true;
-  const ua = navigator.userAgent;
-  return /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Android/.test(ua);
-}
-
-function buildVideoConstraints(facingMode) {
-  if (isIOS()) {
-    return {
-      audio: false,
-      video: {
-        facingMode,
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-    };
-  }
-  return {
-    audio: false,
-    video: {
-      ...CONFIG.videoBase,
-      facingMode: { ideal: facingMode },
-    },
-  };
-}
-
-function applyInlineVideoAttrs(video) {
-  if (!video) return;
-  video.muted = true;
-  video.defaultMuted = true;
-  video.playsInline = true;
-  video.setAttribute('playsinline', '');
-  video.setAttribute('webkit-playsinline', '');
-}
-
-// ---------------------------------------------------------------------------
-// DOM references
-// ---------------------------------------------------------------------------
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -100,6 +39,7 @@ const els = {
 
 const state = {
   cameraReady: false,
+  overlayReady: false,
   experienceStarted: false,
   isPlaying: false,
   countdownActive: false,
@@ -109,34 +49,66 @@ const state = {
   isSwitchingCamera: false,
 };
 
-const loadingSteps = {
-  camera: false,
-  overlayVideo: false,
-};
+function isIOS() {
+  return (
+    /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isSafariLike() {
+  return isIOS() || /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+}
+
+function applyVideoAttrs(video) {
+  if (!video) return;
+  video.muted = true;
+  video.defaultMuted = true;
+  video.playsInline = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.setAttribute('muted', '');
+}
+
+function buildVideoConstraints(facingMode) {
+  return {
+    audio: false,
+    video: {
+      facingMode: { ideal: facingMode },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    },
+  };
+}
+
+async function getCameraStream(facingMode) {
+  const attempts = [
+    buildVideoConstraints(facingMode),
+    { audio: false, video: { facingMode } },
+    { audio: false, video: true },
+  ];
+
+  let lastErr;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
 
 function updateLoadingUI(message) {
   if (message) els.loadingMessage.textContent = message;
-  const done = Object.values(loadingSteps).filter(Boolean).length;
-  const total = Object.keys(loadingSteps).length;
-  els.loadingBar.style.width = `${(done / total) * 100}%`;
+  const done = (state.cameraReady ? 1 : 0) + (state.overlayReady ? 1 : 0);
+  els.loadingBar.style.width = `${(done / 2) * 100}%`;
 }
 
-function checkAllLoaded() {
-  if (!loadingSteps.camera || !loadingSteps.overlayVideo) return;
-
+function tryFinishLoading() {
+  if (!state.cameraReady || !state.overlayReady) return;
   updateLoadingUI('Ready');
   startExperience();
-}
-
-function getOverlaySources() {
-  const { webm, hevc } = CONFIG.overlayVideos;
-  if (isSafariLike()) {
-    return [{ src: hevc, type: 'video/mp4; codecs="hvc1"' }];
-  }
-  return [
-    { src: webm, type: 'video/webm' },
-    { src: hevc, type: 'video/quicktime' },
-  ];
 }
 
 function showError(message) {
@@ -149,10 +121,23 @@ function hideError() {
   els.errorScreen.hidden = true;
 }
 
-/** Draw image/video with object-fit: cover */
-function drawCover(ctx, source, cw, ch, { mirror = false } = {}) {
-  const iw = source.videoWidth || source.width || 0;
-  const ih = source.videoHeight || source.height || 0;
+function showStatus(text, { playing = false } = {}) {
+  if (!els.statusPill) return;
+  els.statusPill.textContent = text;
+  els.statusPill.hidden = false;
+  els.statusPill.classList.add('is-visible');
+  els.statusPill.classList.toggle('is-playing', playing);
+}
+
+function hideStatus() {
+  if (!els.statusPill) return;
+  els.statusPill.classList.remove('is-visible', 'is-playing');
+  els.statusPill.hidden = true;
+}
+
+function drawCover(ctx, source, cw, ch, mirror = false) {
+  const iw = source.videoWidth || 0;
+  const ih = source.videoHeight || 0;
   if (!iw || !ih) return;
 
   const scale = Math.max(cw / iw, ch / ih);
@@ -179,130 +164,164 @@ function resizeCaptureCanvas() {
   els.captureCanvas.height = Math.round(window.innerHeight * dpr);
 }
 
-function waitForVideoReady(video, { label = 'video', autoplay = false } = {}) {
-  const minReady = isIOS()
-    ? HTMLMediaElement.HAVE_METADATA
-    : HTMLMediaElement.HAVE_CURRENT_DATA;
-
+function waitForMedia(video, label) {
   return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const finish = (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      cleanup();
-      if (err) reject(err);
-      else resolve();
-    };
-
-    const tryFinish = () => {
-      if (autoplay) {
-        video.play().catch(() => {}).finally(() => finish());
-      } else {
-        finish();
-      }
-    };
-
-    const onUsable = () => {
-      if (video.readyState < minReady) return;
-      tryFinish();
-    };
-
-    const onError = () => {
-      const detail = video.error?.message || `code ${video.error?.code ?? 'unknown'}`;
-      finish(
-        new Error(
-          `Failed to load ${label} (${detail}). On iPhone use the HEVC .mov file; on Chrome use WebM.`
-        )
-      );
-    };
-
-    const cleanup = () => {
-      video.removeEventListener('loadedmetadata', onUsable);
-      video.removeEventListener('loadeddata', onUsable);
-      video.removeEventListener('canplay', onUsable);
-      video.removeEventListener('error', onError);
-    };
-
-    const timer = setTimeout(() => {
-      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        tryFinish();
-        return;
-      }
-      finish(new Error(`${label} timed out. Check the file path and your connection.`));
-    }, 45000);
-
-    if (video.readyState >= minReady) {
-      tryFinish();
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      resolve();
       return;
     }
 
-    video.addEventListener('loadedmetadata', onUsable);
-    video.addEventListener('loadeddata', onUsable);
-    video.addEventListener('canplay', onUsable);
-    video.addEventListener('error', onError);
+    const timer = setTimeout(() => {
+      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) resolve();
+      else reject(new Error(`${label} load timed out`));
+    }, 30000);
+
+    const done = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve();
+    };
+    const fail = () => {
+      clearTimeout(timer);
+      cleanup();
+      const msg = video.error?.message || 'unknown error';
+      reject(new Error(`${label} failed: ${msg}`));
+    };
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', done);
+      video.removeEventListener('canplay', done);
+      video.removeEventListener('error', fail);
+    };
+
+    video.addEventListener('loadedmetadata', done, { once: true });
+    video.addEventListener('canplay', done, { once: true });
+    video.addEventListener('error', fail, { once: true });
   });
 }
 
-function safeSetCurrentTime(video, time) {
-  if (!video || video.readyState < HTMLMediaElement.HAVE_METADATA) return;
-  try {
-    video.currentTime = time;
-  } catch {
-    /* iOS can throw if metadata is not ready */
-  }
-}
-
-async function initOverlayVideo() {
-  const sources = getOverlaySources();
-  if (!sources.length || !sources[0]?.src) {
-    throw new Error('Set CONFIG.overlayVideos.webm and .hevc paths.');
-  }
-
-  updateLoadingUI('Loading overlay…');
-  applyInlineVideoAttrs(els.overlayVideo);
+function setupOverlayElement() {
+  const { webm, hevc } = CONFIG.overlayVideos;
+  applyVideoAttrs(els.overlayVideo);
   els.overlayVideo.loop = false;
+  els.overlayVideo.preload = 'auto';
+
   els.overlayVideo.replaceChildren();
   els.overlayVideo.removeAttribute('src');
 
-  if (isIOS()) {
-    els.overlayVideo.src = sources[0].src;
+  if (isSafariLike()) {
+    els.overlayVideo.src = hevc;
+    els.overlayVideo.setAttribute('type', 'video/mp4; codecs="hvc1"');
   } else {
-    for (const { src, type } of sources) {
-      const source = document.createElement('source');
-      source.src = src;
-      source.type = type;
-      els.overlayVideo.append(source);
-    }
+    const w = document.createElement('source');
+    w.src = webm;
+    w.type = 'video/webm; codecs="vp9"';
+    const h = document.createElement('source');
+    h.src = hevc;
+    h.type = 'video/mp4; codecs="hvc1"';
+    els.overlayVideo.append(w, h);
   }
 
   els.overlayVideo.load();
-  await waitForVideoReady(els.overlayVideo, { label: 'overlay', autoplay: false });
-  els.overlayVideo.pause();
-  safeSetCurrentTime(els.overlayVideo, 0);
-  els.overlayVideo.addEventListener('ended', onOverlayEnded);
-  loadingSteps.overlayVideo = true;
-  updateLoadingUI('Overlay ready');
-  checkAllLoaded();
 }
 
-// ---------------------------------------------------------------------------
-// Playback — 3s countdown, play once, PNG capture at end
-// ---------------------------------------------------------------------------
+async function initOverlayVideo() {
+  updateLoadingUI('Loading overlay…');
+  setupOverlayElement();
+  await waitForMedia(els.overlayVideo, 'Overlay video');
+  els.overlayVideo.pause();
+  try {
+    els.overlayVideo.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+  state.overlayReady = true;
+  updateLoadingUI('Overlay ready');
+  tryFinishLoading();
+}
+
+async function attachCameraStream(stream) {
+  state.cameraStream = stream;
+  els.video.srcObject = stream;
+  applyVideoAttrs(els.video);
+  applyMirrorForFacing();
+
+  await new Promise((resolve, reject) => {
+    const onReady = () => {
+      els.video.removeEventListener('loadedmetadata', onReady);
+      els.video.removeEventListener('error', onErr);
+      resolve();
+    };
+    const onErr = () => {
+      els.video.removeEventListener('loadedmetadata', onReady);
+      els.video.removeEventListener('error', onErr);
+      reject(new Error('Camera preview failed'));
+    };
+    if (els.video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      resolve();
+      return;
+    }
+    els.video.addEventListener('loadedmetadata', onReady);
+    els.video.addEventListener('error', onErr);
+  });
+
+  try {
+    await els.video.play();
+  } catch {
+    /* may need Play tap on iOS */
+  }
+}
+
+async function initCamera() {
+  updateLoadingUI('Starting camera…');
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera needs HTTPS (use ngrok) and a modern browser.');
+  }
+
+  const stream = await getCameraStream(state.facingMode);
+  await attachCameraStream(stream);
+
+  state.cameraReady = true;
+  updateLoadingUI('Camera ready');
+  updateCameraToggleUI();
+  checkMultiCameraSupport();
+  tryFinishLoading();
+}
+
+function applyMirrorForFacing() {
+  els.video.classList.toggle('is-mirrored', state.facingMode === 'user');
+}
+
+function updateCameraToggleUI() {
+  if (!els.cameraToggle) return;
+  const front = state.facingMode === 'user';
+  els.cameraToggleLabel.textContent = front ? 'Front' : 'Back';
+  els.cameraToggle.setAttribute('aria-label', front ? 'Switch to back camera' : 'Switch to front camera');
+}
+
+async function checkMultiCameraSupport() {
+  if (!els.cameraToggle) return;
+  try {
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(
+      (d) => d.kind === 'videoinput'
+    );
+    els.cameraToggle.hidden = cams.length < 2;
+  } catch {
+    els.cameraToggle.hidden = false;
+  }
+}
+
 function showPlaybackControls() {
-  if (els.playbackControls) els.playbackControls.hidden = false;
+  els.playbackControls.hidden = false;
   updatePlaybackButtons();
 }
 
 function updatePlaybackButtons() {
-  if (!els.btnPlay || !els.btnPause) return;
   els.btnPlay.disabled = state.countdownActive || state.isPlaying;
   els.btnPause.disabled = !state.isPlaying;
 }
 
 function showCountdown(n) {
-  if (!els.countdown || !els.countdownNumber) return;
   els.countdown.hidden = false;
   els.countdownNumber.textContent = String(n);
   els.countdownNumber.style.animation = 'none';
@@ -311,7 +330,7 @@ function showCountdown(n) {
 }
 
 function hideCountdown() {
-  if (els.countdown) els.countdown.hidden = true;
+  els.countdown.hidden = true;
 }
 
 function cancelCountdown() {
@@ -324,103 +343,119 @@ function cancelCountdown() {
   updatePlaybackButtons();
 }
 
-/** iOS: only start camera here — never await overlay.play() (it can hang forever). */
-async function startCameraFromGesture() {
-  applyInlineVideoAttrs(els.video);
-  if (!state.cameraStream) return;
+/**
+ * iOS/Safari only allow play() inside the same user gesture. Call this synchronously
+ * when Play is tapped, before the countdown timer fires.
+ */
+function unlockMediaOnUserGesture() {
+  applyVideoAttrs(els.video);
+  applyVideoAttrs(els.overlayVideo);
+
+  void els.video.play().catch(() => {});
+
+  void els.overlayVideo
+    .play()
+    .then(() => {
+      els.overlayVideo.pause();
+      try {
+        els.overlayVideo.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    })
+    .catch(() => {});
+}
+
+async function playBothVideos() {
+  applyVideoAttrs(els.video);
+  applyVideoAttrs(els.overlayVideo);
+
+  if (els.overlayVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    await waitForMedia(els.overlayVideo, 'Overlay');
+  }
+
+  els.overlayVideo.pause();
   try {
-    await els.video.play();
-  } catch (err) {
-    console.warn('[AR Lens] camera play failed:', err);
+    els.overlayVideo.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+
+  const results = await Promise.allSettled([els.video.play(), els.overlayVideo.play()]);
+
+  if (results[0].status === 'rejected') {
+    console.warn('[AR Lens] camera play:', results[0].reason);
+  }
+  if (results[1].status === 'rejected') {
+    throw new Error('Overlay would not play — tap Play again.');
   }
 }
 
 function startCountdownThenPlay() {
   if (state.countdownActive || state.isPlaying) return;
 
-  cancelCountdown();
   state.countdownActive = true;
   updatePlaybackButtons();
 
-  let remaining = CONFIG.countdownSeconds;
-  showCountdown(remaining);
-  setStatusPill('Starting in…', { playing: true });
+  let n = CONFIG.countdownSeconds;
+  showCountdown(n);
+  showStatus('Starting in…', { playing: true });
 
   state.countdownTimerId = setInterval(() => {
-    remaining -= 1;
-    if (remaining > 0) {
-      showCountdown(remaining);
+    n -= 1;
+    if (n > 0) {
+      showCountdown(n);
     } else {
       cancelCountdown();
-      beginPlayback();
+      void runPlayback();
     }
   }, 1000);
 }
 
-async function beginPlayback() {
-  if (!els.overlayVideo) return;
-
-  els.overlayVideo.pause();
-  safeSetCurrentTime(els.overlayVideo, 0);
-
+async function runPlayback() {
   try {
-    await els.video.play();
-    await els.overlayVideo.play();
-  } catch {
-    setStatusPill('Tap Play again');
+    await playBothVideos();
+    state.isPlaying = true;
     updatePlaybackButtons();
-    return;
+    showStatus('Playing…', { playing: true });
+  } catch (err) {
+    console.error('[AR Lens]', err);
+    showStatus(err.message || 'Play failed');
+    setTimeout(hideStatus, 3000);
   }
-
-  state.isPlaying = true;
-  updatePlaybackButtons();
-  setStatusPill('Playing…', { playing: true });
 }
 
 function pausePlayback() {
   cancelCountdown();
-  els.overlayVideo?.pause();
+  els.overlayVideo.pause();
   state.isPlaying = false;
   updatePlaybackButtons();
-  setStatusPill('Paused');
-  setTimeout(hideStatusPill, 1200);
+  showStatus('Paused');
+  setTimeout(hideStatus, 1200);
 }
 
-function drawCompositeToCaptureCanvas() {
-  if (!els.captureCanvas) return;
+function drawComposite() {
   const ctx = els.captureCanvas.getContext('2d');
   const w = els.captureCanvas.width;
   const h = els.captureCanvas.height;
   ctx.clearRect(0, 0, w, h);
-
-  if (els.video.videoWidth > 0) {
-    drawCover(ctx, els.video, w, h, { mirror: state.facingMode === 'user' });
+  if (els.video.videoWidth) {
+    drawCover(ctx, els.video, w, h, state.facingMode === 'user');
   }
-  if (els.overlayVideo.videoWidth > 0) {
+  if (els.overlayVideo.videoWidth) {
     drawCover(ctx, els.overlayVideo, w, h);
   }
 }
 
-function waitNextFrame() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
-
 function canvasToPngBlob(canvas) {
   return new Promise((resolve) => {
-    if (!canvas) {
-      resolve(null);
-      return;
-    }
     canvas.toBlob((blob) => {
       if (blob) {
         resolve(blob);
         return;
       }
       try {
-        const dataUrl = canvas.toDataURL('image/png');
-        fetch(dataUrl)
+        fetch(canvas.toDataURL('image/png'))
           .then((r) => r.blob())
           .then(resolve)
           .catch(() => resolve(null));
@@ -432,7 +467,6 @@ function canvasToPngBlob(canvas) {
 }
 
 function hideCapturePreview() {
-  if (!els.capturePreview) return;
   els.capturePreview.hidden = true;
   if (els.capturePreviewImg?.src?.startsWith('blob:')) {
     URL.revokeObjectURL(els.capturePreviewImg.src);
@@ -441,27 +475,23 @@ function hideCapturePreview() {
 }
 
 function showCapturePreview(blob) {
-  if (!els.capturePreview || !els.capturePreviewImg) return;
   const url = URL.createObjectURL(blob);
   els.capturePreviewImg.src = url;
-  if (els.capturePreviewHint) {
-    els.capturePreviewHint.textContent = isIOS()
-      ? 'Long-press the image → Save to Photos. Or use the Share button if it appeared.'
-      : 'Right-click or long-press the image to save.';
-  }
+  els.capturePreviewHint.textContent = isIOS()
+    ? 'Long-press the image → Save to Photos'
+    : 'Right-click or long-press to save';
   els.capturePreview.hidden = false;
 }
 
-async function saveCaptureBlob(blob) {
-  const filename = `ar-lens-${Date.now()}.png`;
-  const file = new File([blob], filename, { type: 'image/png' });
+async function savePhoto(blob) {
+  const file = new File([blob], `ar-lens-${Date.now()}.png`, { type: 'image/png' });
 
-  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+  if (navigator.share?.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'AR Lens' });
-      return 'shared';
+      await navigator.share({ files: [file] });
+      return;
     } catch (err) {
-      if (err?.name === 'AbortError') return 'cancelled';
+      if (err?.name === 'AbortError') return;
     }
   }
 
@@ -469,249 +499,58 @@ async function saveCaptureBlob(blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.append(a);
+    a.download = file.name;
     a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    return 'downloaded';
-  }
-
-  showCapturePreview(blob);
-  return 'preview';
-}
-
-async function captureCompositeSnapshot() {
-  resizeCaptureCanvas();
-  drawCompositeToCaptureCanvas();
-
-  const blob = await canvasToPngBlob(els.captureCanvas);
-  if (!blob) {
-    setStatusPill('Could not save photo');
+    URL.revokeObjectURL(url);
     return;
   }
 
-  const result = await saveCaptureBlob(blob);
-  if (result === 'shared') {
-    setStatusPill('Photo shared');
-  } else if (result === 'preview') {
-    setStatusPill('Photo ready — save from preview');
-  } else if (result === 'downloaded') {
-    setStatusPill('Photo saved');
-  }
+  showCapturePreview(blob);
 }
 
 async function onOverlayEnded() {
   state.isPlaying = false;
   els.overlayVideo.pause();
-  if (isIOS()) await waitNextFrame();
-  drawCompositeToCaptureCanvas();
-  await captureCompositeSnapshot();
-
   updatePlaybackButtons();
-  setTimeout(hideStatusPill, 5000);
+
+  resizeCaptureCanvas();
+  drawComposite();
+  const blob = await canvasToPngBlob(els.captureCanvas);
+  if (blob) {
+    await savePhoto(blob);
+    showStatus('Photo saved — tap Play to replay');
+    setTimeout(hideStatus, 4000);
+  }
+}
+
+function onPlayPressed() {
+  if (state.countdownActive || state.isPlaying) return;
+  unlockMediaOnUserGesture();
+  startCountdownThenPlay();
 }
 
 function bindPlaybackControls() {
-  let playLock = false;
+  let playHandled = false;
 
-  const onPlay = async () => {
-    if (playLock) return;
-    playLock = true;
-    try {
-      await startCameraFromGesture();
-      startCountdownThenPlay();
-    } finally {
-      setTimeout(() => {
-        playLock = false;
-      }, 500);
+  const onPlay = (e) => {
+    e.preventDefault();
+    if (playHandled) {
+      playHandled = false;
+      return;
     }
+    onPlayPressed();
   };
 
-  const bindPlay = (handler) => {
-    els.btnPlay?.addEventListener('touchend', handler, { passive: false });
-    els.btnPlay?.addEventListener('click', handler);
-  };
-
-  if (isIOS()) {
-    bindPlay((e) => {
-      e.preventDefault();
-      void onPlay();
-    });
-  } else {
-    els.btnPlay?.addEventListener('click', () => void onPlay());
-  }
-
-  els.btnPause?.addEventListener('click', () => pausePlayback());
-}
-
-function bindCapturePreview() {
-  els.capturePreviewClose?.addEventListener('click', hideCapturePreview);
-}
-
-function applyMirrorForFacing() {
-  els.video.classList.toggle('is-mirrored', state.facingMode === 'user');
-}
-
-function updateCameraToggleUI() {
-  if (!els.cameraToggle) return;
-  const isFront = state.facingMode === 'user';
-  if (els.cameraToggleLabel) {
-    els.cameraToggleLabel.textContent = isFront ? 'Front' : 'Back';
-  }
-  els.cameraToggle.setAttribute(
-    'aria-label',
-    isFront ? 'Switch to back camera' : 'Switch to front camera'
+  els.btnPlay.addEventListener(
+    'touchend',
+    (e) => {
+      playHandled = true;
+      onPlay(e);
+    },
+    { passive: false }
   );
-}
-
-function attachStream(stream) {
-  return new Promise((resolve, reject) => {
-    state.cameraStream = stream;
-    els.video.srcObject = stream;
-
-    const cleanup = () => {
-      els.video.removeEventListener('loadedmetadata', onMeta);
-      els.video.removeEventListener('error', onError);
-    };
-
-    const onMeta = async () => {
-      applyMirrorForFacing();
-      applyInlineVideoAttrs(els.video);
-      try {
-        await els.video.play();
-      } catch {
-        /* iOS may block until tap — camera still OK */
-      }
-      cleanup();
-      resolve();
-    };
-
-    const onError = () => {
-      cleanup();
-      reject(new Error('Video playback failed.'));
-    };
-
-    els.video.addEventListener('loadedmetadata', onMeta);
-    els.video.addEventListener('error', onError);
-  });
-}
-
-async function initCamera() {
-  updateLoadingUI('Initializing camera…');
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error(
-      'Camera API is not supported on this device. Try Chrome or Safari on a phone with HTTPS.'
-    );
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia(
-      buildVideoConstraints(state.facingMode)
-    );
-    await attachStream(stream);
-
-    state.cameraReady = true;
-    loadingSteps.camera = true;
-    updateLoadingUI('Camera ready');
-    updateCameraToggleUI();
-    checkMultiCameraSupport();
-    checkAllLoaded();
-  } catch (err) {
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      throw new Error(
-        'Camera permission was denied. Allow camera access in your browser settings and reload.'
-      );
-    }
-    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-      throw new Error('No camera found on this device.');
-    }
-    if (err.name === 'NotReadableError' || err.name === 'OverconstrainedError') {
-      throw new Error('Camera is in use by another app or not available right now.');
-    }
-    throw err;
-  }
-}
-
-async function checkMultiCameraSupport() {
-  if (!els.cameraToggle) return;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter((d) => d.kind === 'videoinput');
-    if (cams.length > 1) {
-      els.cameraToggle.hidden = false;
-    }
-  } catch {
-    els.cameraToggle.hidden = false;
-  }
-}
-
-async function switchCamera() {
-  if (state.isSwitchingCamera || !state.cameraReady) return;
-  state.isSwitchingCamera = true;
-
-  if (els.cameraToggle) {
-    els.cameraToggle.disabled = true;
-    els.cameraToggle.classList.add('is-switching');
-  }
-
-  const previous = state.facingMode;
-  const next = previous === 'user' ? 'environment' : 'user';
-
-  if (state.cameraStream) {
-    state.cameraStream.getTracks().forEach((t) => t.stop());
-    state.cameraStream = null;
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia(buildVideoConstraints(next));
-    state.facingMode = next;
-    await attachStream(stream);
-    updateCameraToggleUI();
-    setStatusPill(next === 'user' ? 'Front camera' : 'Back camera');
-    setTimeout(hideStatusPill, 1200);
-  } catch (err) {
-    console.warn('[AR Lens] Camera switch failed:', err);
-    setStatusPill('Camera switch unavailable');
-    setTimeout(hideStatusPill, 1600);
-    try {
-      const restore = await navigator.mediaDevices.getUserMedia(
-        buildVideoConstraints(previous)
-      );
-      state.facingMode = previous;
-      await attachStream(restore);
-      updateCameraToggleUI();
-    } catch {
-      /* leave video blank */
-    }
-  } finally {
-    state.isSwitchingCamera = false;
-    if (els.cameraToggle) {
-      els.cameraToggle.disabled = false;
-      els.cameraToggle.classList.remove('is-switching');
-    }
-  }
-}
-
-function bindCameraToggle() {
-  if (!els.cameraToggle) return;
-  els.cameraToggle.addEventListener('click', () => switchCamera());
-}
-
-function setStatusPill(text, { playing = false } = {}) {
-  if (!els.statusPill) return;
-  els.statusPill.textContent = text;
-  els.statusPill.hidden = false;
-  els.statusPill.classList.add('is-visible');
-  els.statusPill.classList.toggle('is-playing', playing);
-}
-
-function hideStatusPill() {
-  if (!els.statusPill) return;
-  els.statusPill.classList.remove('is-visible', 'is-playing');
-  els.statusPill.hidden = true;
+  els.btnPlay.addEventListener('click', onPlay);
+  els.btnPause.addEventListener('click', () => pausePlayback());
 }
 
 function startExperience() {
@@ -719,78 +558,85 @@ function startExperience() {
   state.experienceStarted = true;
   els.loadingScreen.classList.add('is-hidden');
   showPlaybackControls();
-  void startCameraFromGesture();
-  setStatusPill('Tap Play to begin');
-  setTimeout(hideStatusPill, 2500);
+  showStatus('Tap Play');
+  setTimeout(hideStatus, 2000);
 }
 
-function teardown() {
+async function switchCamera() {
+  if (state.isSwitchingCamera || !state.cameraReady) return;
+  state.isSwitchingCamera = true;
+  els.cameraToggle.disabled = true;
+
+  const prev = state.facingMode;
+  const next = prev === 'user' ? 'environment' : 'user';
+
+  if (state.cameraStream) {
+    state.cameraStream.getTracks().forEach((t) => t.stop());
+  }
+
+  try {
+    const stream = await getCameraStream(next);
+    state.facingMode = next;
+    await attachCameraStream(stream);
+    updateCameraToggleUI();
+    showStatus(next === 'user' ? 'Front camera' : 'Back camera');
+    setTimeout(hideStatus, 1200);
+  } catch (err) {
+    console.warn('[AR Lens] switch failed', err);
+    try {
+      const stream = await getCameraStream(prev);
+      state.facingMode = prev;
+      await attachCameraStream(stream);
+    } catch {
+      /* empty */
+    }
+  } finally {
+    state.isSwitchingCamera = false;
+    els.cameraToggle.disabled = false;
+  }
+}
+
+
+async function boot() {
+  hideError();
+  state.cameraReady = false;
+  state.overlayReady = false;
+  state.experienceStarted = false;
   cancelCountdown();
-  pausePlayback();
+  state.isPlaying = false;
+
   if (state.cameraStream) {
     state.cameraStream.getTracks().forEach((t) => t.stop());
     state.cameraStream = null;
   }
-  state.experienceStarted = false;
-  state.isPlaying = false;
-  state.facingMode = CONFIG.defaultFacingMode;
-  state.isSwitchingCamera = false;
-  if (els.cameraToggle) {
-    els.cameraToggle.hidden = true;
-    els.cameraToggle.disabled = false;
-    els.cameraToggle.classList.remove('is-switching');
-  }
-  els.video.classList.remove('is-mirrored');
-  if (els.overlayVideo) {
-    els.overlayVideo.removeEventListener('ended', onOverlayEnded);
-    els.overlayVideo.pause();
-    els.overlayVideo.replaceChildren();
-    els.overlayVideo.load();
-  }
-  Object.keys(loadingSteps).forEach((k) => {
-    loadingSteps[k] = false;
-  });
-}
 
-async function boot() {
-  hideError();
   els.loadingScreen.classList.remove('is-hidden');
   els.loadingBar.style.width = '0%';
+  els.playbackControls.hidden = true;
 
   try {
-    applyInlineVideoAttrs(els.video);
-    applyInlineVideoAttrs(els.overlayVideo);
-    await initCamera();
-    await initOverlayVideo();
+    await Promise.all([initCamera(), initOverlayVideo()]);
   } catch (err) {
     console.error('[AR Lens]', err);
-    showError(err.message || 'Something went wrong. Please try again.');
+    showError(err.message || 'Something went wrong.');
   }
-}
-
-function initVisibilityHandling() {
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      if (state.isPlaying) pausePlayback();
-    } else {
-      els.video?.play().catch(() => {});
-    }
-  });
 }
 
 function init() {
+  applyVideoAttrs(els.video);
+  applyVideoAttrs(els.overlayVideo);
+  els.overlayVideo.addEventListener('ended', onOverlayEnded);
+
   bindPlaybackControls();
-  bindCapturePreview();
-  bindCameraToggle();
-  initVisibilityHandling();
+  els.capturePreviewClose?.addEventListener('click', hideCapturePreview);
+  els.cameraToggle?.addEventListener('click', () => switchCamera());
+  els.errorRetry?.addEventListener('click', () => boot());
   window.addEventListener('resize', resizeCaptureCanvas);
-
-  els.errorRetry.addEventListener('click', () => {
-    teardown();
-    window.removeEventListener('resize', resizeCaptureCanvas);
-    boot();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.cameraStream) {
+      els.video.play().catch(() => {});
+    }
   });
-
   resizeCaptureCanvas();
   boot();
 }
