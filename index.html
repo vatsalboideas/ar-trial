@@ -33,32 +33,76 @@
     aria-hidden="true"
   ></video>
 
+  <canvas id="render-canvas" class="render-canvas" aria-hidden="true" hidden></canvas>
+
   <canvas id="capture-canvas" class="capture-canvas" aria-hidden="true"></canvas>
 
-  <!-- Play / Pause -->
-  <div id="playback-dock" class="playback-dock">
-    <div id="playback-controls" class="playback-controls" hidden>
-      <button id="btn-play" class="playback-btn playback-btn--play" type="button">Play</button>
-      <button id="btn-pause" class="playback-btn playback-btn--pause" type="button" disabled>Pause</button>
+  <main class="app-shell" aria-label="AR camera controls">
+    <section class="controls-panel" aria-label="Camera controls">
+      <div class="controls-head">
+        <p class="controls-title">AR Lens Studio</p>
+        <button
+          id="controls-toggle"
+          class="controls-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="controls-content"
+          aria-label="Collapse top options"
+        >
+          Hide
+        </button>
+      </div>
+      <div id="controls-content" class="controls-row">
+        <label id="camera-select-wrap" class="camera-resolution-wrap" hidden>
+          <span class="camera-select-title">Camera</span>
+          <select id="camera-select" class="camera-select" aria-label="Camera selection"></select>
+        </label>
+
+        <label id="camera-resolution-wrap" class="camera-resolution-wrap">
+          <span class="camera-select-title">Resolution</span>
+          <select id="camera-resolution" class="camera-select" aria-label="Camera resolution">
+            <option value="hd">HD (720p)</option>
+            <option value="fullhd">Full HD (1080p)</option>
+            <option value="2k">2K (1440p)</option>
+            <option value="4k" selected>4K (2160p)</option>
+          </select>
+        </label>
+
+        <button
+          id="mirror-toggle"
+          class="mirror-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-label="Toggle camera mirroring"
+        >
+          Mirror Off
+        </button>
+      </div>
+    </section>
+    <button
+      id="controls-open"
+      class="controls-open"
+      type="button"
+      aria-controls="controls-content"
+      aria-label="Show top options"
+      hidden
+    >
+      Options
+    </button>
+
+    <!-- Play / Pause -->
+    <div id="playback-dock" class="playback-dock">
+      <div id="playback-controls" class="playback-controls" hidden>
+        <button id="btn-play" class="playback-btn playback-btn--play" type="button">Play</button>
+        <button id="btn-pause" class="playback-btn playback-btn--pause" type="button" disabled>Pause</button>
+      </div>
     </div>
-  </div>
+  </main>
 
   <!-- Countdown before play -->
   <div id="countdown" class="countdown" role="status" aria-live="assertive" hidden>
     <span id="countdown-number" class="countdown-number">3</span>
   </div>
-
-  <!-- Camera flip (front / back) -->
-  <button
-    id="camera-toggle"
-    class="camera-toggle"
-    type="button"
-    aria-label="Switch to back camera"
-    hidden
-  >
-    <span class="camera-toggle-icon" aria-hidden="true">⟳</span>
-    <span id="camera-toggle-label" class="camera-toggle-label">Front</span>
-  </button>
 
   <!-- Status pill -->
   <div id="status-pill" class="status-pill" role="status" aria-live="polite" hidden></div>
@@ -72,6 +116,7 @@
       <div class="loading-progress">
         <div id="loading-bar" class="loading-bar"></div>
       </div>
+      <button id="loading-start" class="loading-start" type="button" hidden>Tap to start</button>
     </div>
   </div>
 
@@ -85,6 +130,24 @@
     </div>
   </div>
 
+  <!-- Upload QR preview (shows for 20s) -->
+  <div id="upload-qr" class="upload-qr" hidden>
+    <div class="upload-qr-card">
+      <p class="upload-qr-title">Scan to download</p>
+      <div id="upload-qr-code" class="upload-qr-code" aria-label="QR code download link"></div>
+      <a
+        id="upload-qr-link"
+        class="upload-qr-link"
+        href="#"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Open download link
+      </a>
+      <p id="upload-qr-timer" class="upload-qr-timer"></p>
+    </div>
+  </div>
+
   <!-- Error screen -->
   <div id="error-screen" class="error-screen" role="alert" hidden>
     <div class="error-card">
@@ -94,6 +157,10 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" defer></script>
+  <script src="https://unpkg.com/@imagekit/javascript@5.0.0/dist/imagekit.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
   <script src="script.js" defer></script>
 </body>
 </html>

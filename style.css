@@ -35,6 +35,99 @@ body {
   user-select: none;
 }
 
+.app-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.controls-panel {
+  position: fixed;
+  top: calc(14px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(94vw, 740px);
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 25, 0.74) 0%,
+    rgba(10, 14, 25, 0.42) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.controls-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.controls-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.64);
+  font-weight: 700;
+}
+
+.controls-toggle {
+  min-width: 72px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.controls-toggle:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.controls-open {
+  position: fixed;
+  top: calc(14px + var(--safe-top));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 18;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(12, 14, 22, 0.66);
+  color: rgba(255, 255, 255, 0.95);
+  padding: 8px 14px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.controls-open:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.controls-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* --------------------------------------------------------------------------
    Video layers — camera (back) → alpha overlay (front)
    -------------------------------------------------------------------------- */
@@ -59,9 +152,34 @@ body {
   z-index: 1;
   background: transparent;
   pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
-/* Selfie-style mirror only when using the front (user) camera */
+.render-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  background: transparent;
+  pointer-events: none;
+}
+
+.render-canvas[hidden] {
+  display: none !important;
+}
+
+.overlay-video.is-canvas-rendered {
+  opacity: 0;
+}
+
+/* iOS: overlay plays during countdown but stays invisible until “go” */
+.overlay-video.is-preroll {
+  opacity: 0;
+}
+
+/* Optional mirror mode for preview + captures */
 .camera-feed.is-mirrored {
   transform: scaleX(-1);
 }
@@ -144,16 +262,20 @@ body {
 .countdown {
   position: fixed;
   inset: 0;
-  z-index: 50;
-  display: flex;
+  z-index: 150;
+  display: none;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   background: radial-gradient(
     ellipse at center,
-    rgba(10, 10, 18, 0.5) 0%,
+    rgba(10, 10, 18, 0.55) 0%,
     transparent 70%
   );
+}
+
+.countdown.is-visible {
+  display: flex !important;
 }
 
 .countdown[hidden] {
@@ -225,64 +347,65 @@ body {
 /* --------------------------------------------------------------------------
    Camera flip button (front ↔ back)
    -------------------------------------------------------------------------- */
-.camera-toggle {
-  position: fixed;
-  top: calc(16px + var(--safe-top));
-  right: calc(16px + env(safe-area-inset-right, 0px));
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 14px 9px 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass);
-  color: rgba(255, 255, 255, 0.94);
-  font-family: inherit;
-  font-size: 0.78rem;
+.camera-select-title {
+  font-size: 0.66rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.camera-select {
+  width: clamp(150px, 26vw, 220px);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 14, 22, 0.85);
+  color: rgba(255, 255, 255, 0.94);
+  padding: 7px 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.camera-select:focus-visible {
+  border-color: rgba(94, 232, 184, 0.7);
+}
+
+.camera-resolution-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mirror-toggle {
+  min-width: 122px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.94);
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  transition: transform var(--transition-fast), opacity var(--transition-fast),
-    border-color var(--transition-fast);
+  transition: transform var(--transition-fast), border-color var(--transition-fast),
+    background var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 
-.camera-toggle[hidden] {
-  display: none !important;
+.mirror-toggle[aria-pressed="true"] {
+  border-color: rgba(94, 232, 184, 0.8);
+  background: rgba(94, 232, 184, 0.2);
+  color: #dbfff2;
 }
 
-.camera-toggle:active:not(:disabled) {
-  transform: scale(0.94);
+.mirror-toggle:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
-.camera-toggle:disabled {
-  opacity: 0.55;
+.mirror-toggle:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
-}
-
-.camera-toggle:not(:disabled):hover {
-  border-color: rgba(94, 232, 184, 0.45);
-}
-
-.camera-toggle-icon {
-  font-size: 0.95rem;
-  line-height: 1;
-  display: inline-block;
-  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.camera-toggle.is-switching .camera-toggle-icon {
-  transform: rotate(180deg);
-}
-
-.camera-toggle-label {
-  font-variant-numeric: tabular-nums;
 }
 
 /* --------------------------------------------------------------------------
@@ -365,6 +488,23 @@ body {
   transition: width 0.3s ease;
 }
 
+.loading-start {
+  margin-top: 20px;
+  padding: 14px 32px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #3dd4a8);
+  color: #0a0a12;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.loading-start:active {
+  transform: scale(0.97);
+}
+
 /* --------------------------------------------------------------------------
    Capture preview (iOS save)
    -------------------------------------------------------------------------- */
@@ -421,6 +561,72 @@ body {
   font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Upload QR panel
+   -------------------------------------------------------------------------- */
+.upload-qr {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(100px + var(--safe-bottom));
+  z-index: 30;
+  pointer-events: none;
+}
+
+.upload-qr[hidden] {
+  display: none !important;
+}
+
+.upload-qr-card {
+  width: min(72vw, 260px);
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  background: rgba(12, 14, 22, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 12px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.upload-qr-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  margin-bottom: 10px;
+}
+
+.upload-qr-code {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 10px;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.upload-qr-code img,
+.upload-qr-code canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.upload-qr-link {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 0.74rem;
+  text-decoration: none;
+}
+
+.upload-qr-timer {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.64);
 }
 
 /* --------------------------------------------------------------------------
@@ -486,9 +692,64 @@ body {
 
 /* Phones (portrait) */
 @media (max-width: 600px) {
-  .camera-toggle {
-    padding: 8px 12px 8px 10px;
-    font-size: 0.72rem;
+  .controls-panel {
+    top: calc(10px + var(--safe-top));
+    padding: 8px 10px;
+  }
+
+  .controls-title {
+    font-size: 0.68rem;
+  }
+
+  .controls-head {
+    margin-bottom: 6px;
+  }
+
+  .controls-toggle {
+    min-width: 64px;
+    padding: 5px 10px;
+    font-size: 0.68rem;
+  }
+
+  .controls-open {
+    top: calc(10px + var(--safe-top));
+    padding: 7px 12px;
+    font-size: 0.7rem;
+  }
+
+  .controls-row {
+    align-items: center;
+  }
+
+  .camera-resolution-wrap {
+    width: 100%;
+  }
+
+  .camera-select {
+    width: 100%;
+    font-size: 0.75rem;
+    padding: 6px 7px;
+  }
+
+  .mirror-toggle {
+    min-width: 108px;
+    padding: 7px 10px;
+    font-size: 0.74rem;
+  }
+
+  .upload-qr {
+    right: 10px;
+    bottom: calc(92px + var(--safe-bottom));
+  }
+
+  .upload-qr-card {
+    width: min(86vw, 240px);
+    padding: 10px;
+  }
+
+  .upload-qr-code {
+    width: 180px;
+    height: 180px;
   }
 
   .playback-btn {
