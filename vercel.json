@@ -1,9 +1,9 @@
 {
   "version": 2,
   "routes": [
+    { "src": "/api/imagekit/auth", "dest": "/api/imagekit/auth.js" },
+    { "src": "/api/imagekit/schedule-delete", "dest": "/api/imagekit/schedule-delete.js" },
     { "handle": "filesystem" },
-    { "src": "^/api/imagekit/auth$", "dest": "/api/imagekit/auth.js" },
-    { "src": "^/api/imagekit/schedule-delete$", "dest": "/api/imagekit/schedule-delete.js" },
-    { "src": "^(.*)$", "dest": "/index.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

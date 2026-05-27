@@ -4,9 +4,9 @@
 
 const CONFIG = {
   overlayVideos: {
-    webm: 'assets/videos/Foreground_Cats_with_Supers1.webm',
-    mp4Hevc: 'assets/videos/Foreground_Cats_with_Supers_hevc1.mp4',
-    movHevc: 'assets/videos/Foreground_Cats_with_Supers_hevc1.mov',
+    webm: '/assets/videos/Foreground_Cats_with_Supers1.webm',
+    mp4Hevc: '/assets/videos/Foreground_Cats_with_Supers_hevc1.mp4',
+    movHevc: '/assets/videos/Foreground_Cats_with_Supers_hevc1.mov',
   },
   imageKit: {
     publicKey: 'public_zDPUKTrbaVb4wztH1nh1OOotP6M=',
