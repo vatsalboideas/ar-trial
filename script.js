@@ -13,7 +13,7 @@ const CONFIG = {
     urlEndpoint: 'https://ik.imagekit.io/aazbrhbeib',
     authEndpoint: '/api/imagekit/auth',
     scheduleDeleteEndpoint: '/api/imagekit/schedule-delete',
-    qrVisibleSeconds: 40,
+    qrVisibleSeconds: 30,
   },
   countdownSeconds: 3,
   defaultFacingMode: 'environment',
